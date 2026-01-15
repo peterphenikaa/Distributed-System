@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.distributed.kvstore.grpc";
+option java_outer_classname = "KVStoreProto";
+
+package kvstore;
+
+/**
+ * Service chính để client tương tác với hệ thống
+ * Cung cấp các thao tác cơ bản: PUT, GET, DELETE
+ */
+service KeyValueStore {
+  // Lưu một cặp key-value vào hệ thống
+  // Client gửi request đến bất kỳ node nào
+  // Node sẽ xác định node đúng thông qua consistent hashing
+  rpc Put(PutRequest) returns (PutResponse);
+  
+  // Lấy value theo key
+  // Có thể đọc từ primary hoặc replica
+  rpc Get(GetRequest) returns (GetResponse);
+  
+  // Xóa một key khỏi hệ thống
+  // Xóa cả trên primary và replicas
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+  
+  // Lấy danh sách tất cả keys (để debug/testing)
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+}
+
+/**
+ * Service cho giao tiếp giữa các nodes
+ * Xử lý replication, failure detection, recovery
+ */
+service NodeService {
+  // Gửi heartbeat để báo node còn sống
+  // Mỗi node gửi heartbeat đến tất cả nodes khác định kỳ
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  
+  // Forward request từ node này sang node khác
+  // Dùng khi client connect đến node không chứa data
+  rpc ForwardPut(ForwardPutRequest) returns (ForwardPutResponse);
+  rpc ForwardGet(ForwardGetRequest) returns (ForwardGetResponse);
+  rpc ForwardDelete(ForwardDeleteRequest) returns (ForwardDeleteResponse);
+  
+  // Replicate data từ primary node sang replica
+  // Đảm bảo mỗi key có ít nhất 2 copies
+  rpc Replicate(ReplicateRequest) returns (ReplicateResponse);
+  
+  // Lấy snapshot toàn bộ data từ node khác
+  // Dùng khi node restart và cần khôi phục dữ liệu
+  rpc GetSnapshot(SnapshotRequest) returns (SnapshotResponse);
+  
+  // Thông báo node mới join vào cluster
+  rpc JoinCluster(JoinRequest) returns (JoinResponse);
+  
+  // Lấy thông tin về membership (danh sách nodes)
+  rpc GetMembership(MembershipRequest) returns (MembershipResponse);
+}
+
+// ============== Client-facing Messages ==============
+
+message PutRequest {
+  string key = 1;      // Key để lưu
+  string value = 2;    // Value tương ứng
+  int64 timestamp = 3; // Timestamp để xử lý conflicts (last-write-wins)
+}
+
+message PutResponse {
+  bool success = 1;          // true nếu lưu thành công
+  string message = 2;        // Thông báo lỗi hoặc success message
+  string node_id = 3;        // ID của node xử lý request
+  int32 replicas_count = 4;  // Số lượng replicas đã lưu thành công
+}
+
+message GetRequest {
+  string key = 1;            // Key cần lấy
+  bool read_from_replica = 2; // Có cho phép đọc từ replica không
+}
+
+message GetResponse {
+  bool found = 1;       // true nếu tìm thấy key
+  string value = 2;     // Value tương ứng (empty nếu không tìm thấy)
+  string message = 3;   // Thông báo
+  string node_id = 4;   // Node trả về data
+  int64 timestamp = 5;  // Timestamp của data
+}
+
+message DeleteRequest {
+  string key = 1; // Key cần xóa
+}
+
+message DeleteResponse {
+  bool success = 1;         // true nếu xóa thành công
+  string message = 2;       // Thông báo
+  int32 replicas_count = 3; // Số lượng replicas đã xóa
+}
+
+message ListKeysRequest {
+  // Empty - lấy tất cả keys
+}
+
+message ListKeysResponse {
+  repeated string keys = 1; // Danh sách tất cả keys trên node này
+  int32 count = 2;          // Tổng số keys
+  string node_id = 3;       // Node trả về list
+}
+
+// ============== Node-to-Node Messages ==============
+
+message HeartbeatRequest {
+  string node_id = 1;      // ID của node gửi heartbeat
+  string host = 2;         // Host của node
+  int32 port = 3;          // Port của node
+  int64 timestamp = 4;     // Thời điểm gửi heartbeat
+  int32 keys_count = 5;    // Số lượng keys node này đang giữ
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;   // Xác nhận đã nhận heartbeat
+  string receiver_id = 2;  // ID của node nhận
+  int64 timestamp = 3;     // Thời điểm nhận
+}
+
+message ForwardPutRequest {
+  string key = 1;
+  string value = 2;
+  int64 timestamp = 3;
+  string origin_node_id = 4; // Node ban đầu nhận request từ client
+}
+
+message ForwardPutResponse {
+  bool success = 1;
+  string message = 2;
+  string handler_node_id = 3; // Node thực sự xử lý
+}
+
+message ForwardGetRequest {
+  string key = 1;
+  string origin_node_id = 2;
+}
+
+message ForwardGetResponse {
+  bool found = 1;
+  string value = 2;
+  string message = 3;
+  int64 timestamp = 4;
+}
+
+message ForwardDeleteRequest {
+  string key = 1;
+  string origin_node_id = 2;
+}
+
+message ForwardDeleteResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ReplicateRequest {
+  string key = 1;         // Key cần replicate
+  string value = 2;       // Value tương ứng
+  int64 timestamp = 3;    // Timestamp
+  string primary_node = 4; // Node primary (nguồn của data)
+  ReplicateOperation operation = 5; // PUT hoặc DELETE
+}
+
+enum ReplicateOperation {
+  PUT = 0;
+  DELETE = 1;
+}
+
+message ReplicateResponse {
+  bool success = 1;
+  string message = 2;
+  string replica_node_id = 3;
+}
+
+message SnapshotRequest {
+  string requesting_node_id = 1; // Node yêu cầu snapshot
+}
+
+message SnapshotResponse {
+  repeated KeyValuePair data = 1; // Toàn bộ data
+  int32 total_keys = 2;           // Tổng số keys
+  string provider_node_id = 3;    // Node cung cấp snapshot
+  int64 snapshot_timestamp = 4;   // Thời điểm tạo snapshot
+}
+
+message KeyValuePair {
+  string key = 1;
+  string value = 2;
+  int64 timestamp = 3;
+}
+
+message JoinRequest {
+  string node_id = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message JoinResponse {
+  bool accepted = 1;
+  string message = 2;
+  repeated NodeInfo existing_nodes = 3; // Danh sách nodes hiện tại
+}
+
+message MembershipRequest {
+  string requesting_node_id = 1;
+}
+
+message MembershipResponse {
+  repeated NodeInfo nodes = 1;
+  int32 cluster_size = 2;
+}
+
+message NodeInfo {
+  string node_id = 1;
+  string host = 2;
+  int32 port = 3;
+  NodeStatus status = 4;
+  int64 last_heartbeat = 5; // Unix timestamp
+}
+
+enum NodeStatus {
+  ACTIVE = 0;
+  SUSPECTED = 1; // Nghi ngờ bị lỗi (không nhận heartbeat)
+  FAILED = 2;    // Xác định đã lỗi
+  JOINING = 3;   // Đang join cluster
+  LEAVING = 4;   // Đang rời cluster
+}

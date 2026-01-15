@@ -1,0 +1,44 @@
+{
+  "cluster_name": "kvstore-cluster",
+  "description": "Cấu hình cho cluster gồm 3 nodes",
+  "nodes": [
+    {
+      "id": "node1",
+      "host": "localhost",
+      "port": 8001,
+      "redis_host": "localhost",
+      "redis_port": 6379,
+      "description": "Node 1 - Primary node"
+    },
+    {
+      "id": "node2",
+      "host": "localhost",
+      "port": 8002,
+      "redis_host": "localhost",
+      "redis_port": 6380,
+      "description": "Node 2 - Secondary node"
+    },
+    {
+      "id": "node3",
+      "host": "localhost",
+      "port": 8003,
+      "redis_host": "localhost",
+      "redis_port": 6381,
+      "description": "Node 3 - Tertiary node"
+    }
+  ],
+  "replication": {
+    "replication_factor": 2,
+    "description": "Mỗi key được lưu trên 2 nodes (primary + 1 replica)"
+  },
+  "failure_detection": {
+    "heartbeat_interval_ms": 5000,
+    "description": "Gửi heartbeat mỗi 5 giây",
+    "failure_timeout_ms": 15000,
+    "timeout_description": "Node được coi là failed nếu không nhận heartbeat sau 15 giây"
+  },
+  "consistent_hashing": {
+    "virtual_nodes": 150,
+    "description": "Số lượng virtual nodes trên hash ring cho mỗi physical node"
+  }
+}
