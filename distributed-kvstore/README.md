@@ -4,7 +4,7 @@
 
 Hệ thống lưu trữ key-value phân tán với khả năng chịu lỗi, sử dụng **gRPC** + **Python** + **Redis**. Hệ thống cho phép nhiều nodes hoạt động cùng nhau, tự động phân phối dữ liệu và đảm bảo tính sẵn sàng khi có node bị lỗi.
 
-### 🎯 Mục Tiêu Chính2
+### 🎯 Mục Tiêu Chính5
 
 - Xây dựng distributed key-value store từ đầu
 - Học và apply các concepts: gRPC, Consistent Hashing, Replication, Failure Detection
@@ -12,7 +12,7 @@ Hệ thống lưu trữ key-value phân tán với khả năng chịu lỗi, s�
 
 ---
 
-## 📦 Codebase Ban Đầu1
+## 📦 Codebase Ban Đầu
 
 ```
 distributed-kvstore/
