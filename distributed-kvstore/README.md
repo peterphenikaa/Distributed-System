@@ -12,7 +12,7 @@ Hệ thống lưu trữ key-value phân tán với khả năng chịu lỗi, s�
 
 ---
 
-## 📦 Codebase Ban Đầu
+## 📦 Codebase Ban Đầu1
 
 ```
 distributed-kvstore/
