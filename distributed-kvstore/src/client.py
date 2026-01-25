@@ -1,1 +1,2 @@
-# gRPC Client - Implement your client here
+# gRPC Client implementation
+# TODO: Code here
