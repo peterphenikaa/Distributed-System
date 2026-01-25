@@ -1,771 +1,432 @@
-# Hệ Thống Phân Tán Key-Value Store
+# 🚀 Distributed Key-Value Store System
 
-## 📋 Mục Lục
+## 📝 Tổng Quan Dự Án
 
-- [Tổng Quan](#tổng-quan)
-- [Kiến Trúc Hệ Thống](#kiến-trúc-hệ-thống)
-- [Công Nghệ Sử Dụng](#công-nghệ-sử-dụng)
-- [Cấu Trúc Project](#cấu-trúc-project)
-- [Kế Hoạch Phát Triển](#kế-hoạch-phát-triển)
-- [Hướng Dẫn Cài Đặt](#hướng-dẫn-cài-đặt)
-- [Hướng Dẫn Chạy](#hướng-dẫn-chạy)
-- [Testing](#testing)
-- [Tài Liệu Kỹ Thuật](#tài-liệu-kỹ-thuật)
+Hệ thống lưu trữ key-value phân tán với khả năng chịu lỗi, sử dụng **gRPC** + **Python** + **Redis**. Hệ thống cho phép nhiều nodes hoạt động cùng nhau, tự động phân phối dữ liệu và đảm bảo tính sẵn sàng khi có node bị lỗi.
+
+### 🎯 Mục Tiêu Chính
+
+- Xây dựng distributed key-value store từ đầu
+- Học và apply các concepts: gRPC, Consistent Hashing, Replication, Failure Detection
+- Tạo hệ thống có khả năng scale và fault-tolerant
 
 ---
 
-## 🎯 Tổng Quan
+## 📦 Codebase Ban Đầu
 
-Dự án xây dựng hệ thống lưu trữ key-value phân tán, hoạt động trên nhiều nodes. Mỗi node lưu trữ một phần dữ liệu và phối hợp với các nodes khác để đảm bảo tính nhất quán và khả năng chịu lỗi.
+```
+distributed-kvstore/
+├── src/
+│   ├── proto/
+│   │   └── kvstore.proto           # gRPC service definitions
+│   ├── storage/
+│   │   └── __init__.py
+│   ├── server.py                   # (empty - cần implement)
+│   ├── client.py                   # (empty - cần implement)
+│   └── __init__.py
+├── config/
+│   ├── cluster.json                # Config cho 3 nodes
+│   └── redis-*.conf                # Redis configs
+├── scripts/
+│   └── start-*.bat/sh              # Scripts để start cluster
+├── requirements.txt                # Python dependencies
+├── generate_grpc.py                # Script để generate gRPC code
+└── README.md                       # File này
+```
 
-### Tính Năng Chính
+### ✅ Đã Setup Sẵn:
 
-- ✅ **Phân tán dữ liệu** sử dụng Consistent Hashing
-- ✅ **Replication** với replication factor = 2 (mỗi key có 2 copies)
-- ✅ **Failure Detection** qua heartbeat mechanism
-- ✅ **Data Recovery** khi node restart
-- ✅ **Request Forwarding** tự động đến node đúng
-- ✅ **Redis** làm storage backend (persistent + high performance)
+1. **Proto Definitions** (`src/proto/kvstore.proto`)
+   - Services: `KeyValueStore`, `NodeService`
+   - Messages: PUT/GET/DELETE requests & responses
+   - Inter-node communication messages
+
+2. **Dependencies** (`requirements.txt`)
+   - gRPC + Protobuf
+   - Redis client
+
+3. **Config Files**
+   - Cluster config cho 3 nodes (ports 8001, 8002, 8003)
+   - Redis configs cho 3 instances (ports 6379, 6380, 6381)
 
 ---
 
 ## 🏗️ Kiến Trúc Hệ Thống
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                        CLIENTS                          │
-│              (PUT/GET/DELETE operations)                │
-└─────────────────────────────────────────────────────────┘
+       CLIENT
+          │
+          ▼ gRPC
+    ┌─────────────┐
+    │   Node 1    │◄──────┐
+    │  (Port 8001)│       │
+    └──────┬──────┘       │ gRPC P2P
+           │              │ (Replication,
+    ┌──────▼──────┐       │  Heartbeat)
+    │   Redis 1   │       │
+    │ (Port 6379) │       │
+    └─────────────┘       │
                           │
-              gRPC over TCP/IP (Protobuf)
+    ┌─────────────┐       │
+    │   Node 2    │◄──────┤
+    │  (Port 8002)│       │
+    └──────┬──────┘       │
+           │              │
+    ┌──────▼──────┐       │
+    │   Redis 2   │       │
+    │ (Port 6380) │       │
+    └─────────────┘       │
                           │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-    ┌───▼───┐         ┌───▼───┐         ┌───▼───┐
-    │ Node1 │◄────────►Node2 │◄────────►Node3 │
-    │Port   │  gRPC   │Port   │  gRPC   │Port   │
-    │ 8001  │ P2P     │ 8002  │ P2P     │ 8003  │
-    └───┬───┘         └───┬───┘         └───┬───┘
-        │                 │                 │
-        │                 │                 │
-    ┌───▼───┐         ┌───▼───┐         ┌───▼───┐
-    │Redis 1│         │Redis 2│         │Redis 3│
-    │ 6379  │         │ 6380  │         │ 6381  │
-    └───────┘         └───────┘         └───────┘
-```
-
-### Các Thành Phần
-
-#### 1. **Node (Storage Node)**
-
-- **Chức năng**:
-  - Lưu trữ dữ liệu trong Redis
-  - Xử lý client requests (PUT/GET/DELETE)
-  - Giao tiếp với nodes khác (replication, forwarding)
-  - Tham gia failure detection (heartbeat)
-- **Thành phần con**:
-  - `StorageEngine`: Interface với Redis
-  - `KVStoreService`: gRPC service cho clients
-  - `NodeService`: gRPC service cho inter-node communication
-  - `ConsistentHash`: Xác định key thuộc node nào
-  - `MembershipManager`: Quản lý danh sách nodes
-  - `FailureDetector`: Phát hiện node failure
-  - `ReplicationManager`: Quản lý replication
-
-#### 2. **Client**
-
-- Console application
-- Connect đến bất kỳ node nào
-- Thực hiện PUT/GET/DELETE operations
-- Retry logic khi node failure
-
-#### 3. **Redis**
-
-- Mỗi node có Redis instance riêng
-- Lưu trữ persistent data
-- High performance (in-memory with disk persistence)
-
----
-
-## 🛠️ Công Nghệ Sử Dụng
-
-| Công nghệ            | Phiên bản | Mục đích                        |
-| -------------------- | --------- | ------------------------------- |
-| **Java**             | 11+       | Ngôn ngữ lập trình chính        |
-| **gRPC**             | 1.60.0    | RPC framework cho communication |
-| **Protocol Buffers** | 3.25.1    | Serialization format            |
-| **Redis**            | 7.x       | Storage backend                 |
-| **Jedis**            | 5.1.0     | Java client cho Redis           |
-| **Maven**            | 3.8+      | Build tool                      |
-| **SLF4J + Logback**  | 2.0.9     | Logging framework               |
-| **JUnit 5**          | 5.10.1    | Testing framework               |
-
-### Tại Sao Chọn Các Công Nghệ Này?
-
-**gRPC + Protobuf:**
-
-- High performance (binary protocol)
-- Strong typing với .proto definitions
-- Built-in support cho streaming
-- Cross-language compatibility
-- HTTP/2 multiplexing
-
-**Redis:**
-
-- In-memory performance với disk persistence
-- Atomic operations
-- Simple key-value API
-- Mature và reliable
-- Dễ deploy và scale
-
----
-
-## 📁 Cấu Trúc Project
-
-```
-distributed-kvstore/
-│
-├── pom.xml                          # Maven configuration
-├── README.md                        # File này
-├── docs/                            # Tài liệu chi tiết
-│   ├── architecture.md
-│   ├── protocol.md
-│   └── deployment.md
-│
-├── config/                          # Configuration files
-│   ├── node1.json
-│   ├── node2.json
-│   ├── node3.json
-│   └── cluster.json
-│
-├── scripts/                         # Scripts tiện ích
-│   ├── start-redis.sh              # Start Redis instances
-│   ├── start-cluster.sh            # Start tất cả nodes
-│   └── test-client.sh              # Run test client
-│
-└── src/
-    ├── main/
-    │   ├── java/com/distributed/kvstore/
-    │   │   ├── server/
-    │   │   │   ├── Node.java                    # Main entry point
-    │   │   │   ├── StorageEngine.java           # Redis interface
-    │   │   │   ├── KVStoreServiceImpl.java      # Client-facing gRPC service
-    │   │   │   └── NodeServiceImpl.java         # Inter-node gRPC service
-    │   │   │
-    │   │   ├── client/
-    │   │   │   ├── KVStoreClient.java           # Client application
-    │   │   │   └── ClientCLI.java               # Command-line interface
-    │   │   │
-    │   │   ├── cluster/
-    │   │   │   ├── ConsistentHash.java          # Consistent hashing algorithm
-    │   │   │   ├── MembershipManager.java       # Quản lý nodes trong cluster
-    │   │   │   └── FailureDetector.java         # Heartbeat & failure detection
-    │   │   │
-    │   │   ├── replication/
-    │   │   │   ├── ReplicationManager.java      # Quản lý replication
-    │   │   │   └── ReplicationStrategy.java     # Chiến lược replication
-    │   │   │
-    │   │   ├── config/
-    │   │   │   ├── NodeConfig.java              # Node configuration
-    │   │   │   └── ClusterConfig.java           # Cluster configuration
-    │   │   │
-    │   │   └── util/
-    │   │       ├── HashUtil.java                # Hashing utilities
-    │   │       └── TimestampUtil.java           # Timestamp handling
-    │   │
-    │   ├── proto/
-    │   │   └── kvstore.proto                    # gRPC service definitions
-    │   │
-    │   └── resources/
-    │       ├── logback.xml                      # Logging configuration
-    │       └── application.properties           # Default properties
-    │
-    └── test/
-        └── java/com/distributed/kvstore/
-            ├── ConsistentHashTest.java
-            ├── StorageEngineTest.java
-            ├── ReplicationTest.java
-            └── IntegrationTest.java
+    ┌─────────────┐       │
+    │   Node 3    │◄──────┘
+    │  (Port 8003)│
+    └──────┬──────┘
+           │
+    ┌──────▼──────┐
+    │   Redis 3   │
+    │ (Port 6381) │
+    └─────────────┘
 ```
 
 ---
 
-## 📅 Kế Hoạch Phát Triển
+## 📅 Development Plan - Chia Tasks cho Team
 
-### **Phase 1: Setup & Basic Infrastructure (3-4 ngày)** ✅ ĐANG LÀM
+### 👥 Team Members
 
-#### Tuần 1 - Ngày 1-2:
+- **Linh**: Junior Developer (implement basic features trước)
+- **Bình**: Senior Developer (implement core features, integrate & test)
 
-- [x] Tạo Maven project structure
-- [x] Cấu hình pom.xml với dependencies
-- [x] Định nghĩa .proto files cho gRPC
-- [ ] Generate Java code từ proto files
-- [ ] Setup Redis (3 instances trên ports 6379, 6380, 6381)
+### 🔄 Workflow
 
-#### Tuần 1 - Ngày 3-4:
-
-- [ ] Implement `StorageEngine.java` - Redis client wrapper
-  - Connect đến Redis
-  - Implement PUT/GET/DELETE operations
-  - Error handling
-- [ ] Implement basic `Node.java` - main entry point
-  - Parse command-line arguments
-  - Initialize gRPC server
-  - Connect to Redis
-- [ ] Implement `KVStoreServiceImpl.java` - basic version
-  - Handle PUT request → save to Redis
-  - Handle GET request → read from Redis
-  - Handle DELETE request → delete from Redis
-
-**Deliverable:** 1 node chạy được, client có thể PUT/GET/DELETE
+1. **Linh** code xong → commit code
+2. **Bình** review, implement phần quan trọng, integrate với code của Linh
+3. **Bình** test đầy đủ theo document
+4. ✅ Test pass → Move to next phase
+5. ❌ Test fail → Fix bugs → Re-test
 
 ---
 
-### **Phase 2: Distributed Architecture (4-5 ngày)**
+## 📋 Phase 1: Setup & Basic gRPC (1 ngày)
 
-#### Tuần 2 - Ngày 1-2:
+**Goal**: Generate gRPC code, tạo server/client template
 
-- [ ] Implement `ConsistentHash.java`
-  - Consistent hashing algorithm
-  - Virtual nodes (vnodes) để balance tốt hơn
-  - Xác định node nào chịu trách nhiệm key nào
-- [ ] Implement `MembershipManager.java`
-  - Load cluster configuration
-  - Maintain list of nodes (node_id, host, port)
-  - Update hash ring khi node join/leave
+### 🔧 Tasks
 
-#### Tuần 2 - Ngày 3-4:
+| Task                               | Owner    | Time  | Description                                     |
+| ---------------------------------- | -------- | ----- | ----------------------------------------------- |
+| 1.1: Generate gRPC code            | **Linh** | 30min | Chạy `python generate_grpc.py` và verify        |
+| 1.2: Create basic server structure | **Linh** | 1h    | Tạo `server.py` với class kế thừa gRPC Servicer |
+| 1.3: Create basic client           | **Linh** | 1h    | Tạo `client.py` với connect & stub              |
+| 1.4: Test server startup           | **Bình** | 30min | Verify server start không error                 |
 
-- [ ] Implement request forwarding
-  - Trong `KVStoreServiceImpl`: Check hash ring
-  - Nếu key không thuộc node này → forward đến node đúng
-  - Use `ForwardPut/Get/Delete` RPC calls
-- [ ] Implement `NodeServiceImpl.java` - forwarding methods
-  - Handle ForwardPut/Get/Delete requests
-  - Execute operation và return result
+### ✅ Success Criteria (Phase 1)
 
-#### Tuần 2 - Ngày 5:
-
-- [ ] Testing với 3 nodes
-  - Start 3 nodes với Redis instances khác nhau
-  - Client connect đến random node
-  - Verify data được route đến node đúng
-
-**Deliverable:** 3 nodes phân chia dữ liệu theo consistent hashing
+- [ ] `kvstore_pb2.py` và `kvstore_pb2_grpc.py` generated thành công
+- [ ] Server start được và listen trên port 8001
+- [ ] Client connect được đến server (chưa cần PUT/GET hoạt động)
+- [ ] Không có import errors
 
 ---
 
-### **Phase 3: Replication (4-5 ngày)**
+## 📋 Phase 2: Single Node Storage (2 ngày)
 
-#### Tuần 3 - Ngày 1-2:
+**Goal**: Implement 1 node với in-memory storage hoạt động đầy đủ
 
-- [ ] Design replication strategy
-  - Replication factor = 2
-  - Primary node + 1 successor node (theo hash ring)
-- [ ] Implement `ReplicationManager.java`
-  - Xác định replica nodes
-  - Send ReplicateRequest đến replica
-  - Wait for acknowledgment
+### 🔧 Tasks - Day 1
 
-#### Tuần 3 - Ngày 3-4:
+| Task                          | Owner    | Time | Description                                              |
+| ----------------------------- | -------- | ---- | -------------------------------------------------------- |
+| 2.1: StorageEngine với dict   | **Linh** | 2h   | Implement `storage_engine.py` với dict + threading.RLock |
+| 2.2: Implement Put handler    | **Linh** | 1h   | Handler `Put()` trong server                             |
+| 2.3: Implement Get handler    | **Linh** | 1h   | Handler `Get()` trong server                             |
+| 2.4: Implement Delete handler | **Linh** | 1h   | Handler `Delete()` trong server                          |
 
-- [ ] Update `KVStoreServiceImpl.java` cho replication
-  - PUT operation: Save to local + replicate
-  - DELETE operation: Delete local + replicate delete
-- [ ] Implement `NodeServiceImpl.Replicate()`
-  - Handle ReplicateRequest
-  - Save/delete data trong Redis
-  - Return acknowledgment
+### 🔧 Tasks - Day 2
 
-#### Tuần 3 - Ngày 5:
+| Task                     | Owner    | Time | Description                                         |
+| ------------------------ | -------- | ---- | --------------------------------------------------- |
+| 2.5: Client test methods | **Linh** | 2h   | Implement `put()`, `get()`, `delete()` trong client |
+| 2.6: Add error handling  | **Bình** | 1h   | Try-catch trong server handlers                     |
+| 2.7: Add logging         | **Bình** | 1h   | Setup logging cho debug                             |
+| 2.8: Integration test    | **Bình** | 2h   | Test đầy đủ PUT/GET/DELETE workflow                 |
 
-- [ ] Testing replication
-  - PUT key → verify 2 copies tồn tại
-  - Check data consistency giữa primary và replica
-  - Test read từ replica
+### ✅ Success Criteria (Phase 2)
 
-**Deliverable:** Mỗi key có 2 copies, read hoạt động với replica
-
----
-
-### **Phase 4: Failure Detection & Handling (3-4 ngày)**
-
-#### Tuần 4 - Ngày 1-2:
-
-- [ ] Implement `FailureDetector.java`
-  - Heartbeat sender: Gửi heartbeat mỗi 5 giây
-  - Heartbeat receiver: Update last-seen timestamp
-  - Failure detector: Check timeout (15 giây)
-- [ ] Implement `NodeServiceImpl.Heartbeat()`
-  - Receive heartbeat
-  - Update membership table
-
-#### Tuần 4 - Ngày 3-4:
-
-- [ ] Handle node failure
-  - Update hash ring (remove failed node)
-  - Redirect requests đến replica
-  - Update client connections
-- [ ] Testing failure scenarios
-  - Kill 1 node → verify reads still work từ replica
-  - Verify writes redirect đến available nodes
-
-**Deliverable:** Hệ thống hoạt động khi 1 node failed
+- [ ] PUT key-value thành công
+- [ ] GET key trả về đúng value
+- [ ] DELETE key thành công
+- [ ] GET key đã delete → NOT FOUND
+- [ ] Multiple clients connect cùng lúc không bị race condition
+- [ ] Logs rõ ràng mỗi operation
 
 ---
 
-### **Phase 5: Data Recovery (3-4 ngày)**
+## 📋 Phase 3: Multiple Nodes + Consistent Hashing (3 ngày)
 
-#### Tuần 5 - Ngày 1-2:
+**Goal**: 3 nodes phân chia data theo Consistent Hashing
 
-- [ ] Implement snapshot mechanism
-  - `NodeServiceImpl.GetSnapshot()`: Return all data
-  - Efficient serialization (batch transfer)
-- [ ] Implement recovery protocol trong `Node.java`
-  - Detect startup after failure
-  - Request snapshot từ peer nodes
-  - Load data vào Redis
+### 🔧 Tasks - Day 1
 
-#### Tuần 5 - Ngày 3-4:
+| Task                               | Owner    | Time | Description                            |
+| ---------------------------------- | -------- | ---- | -------------------------------------- |
+| 3.1: ConsistentHash implementation | **Linh** | 3h   | Implement consistent hashing algorithm |
+| 3.2: Hash ring với virtual nodes   | **Linh** | 2h   | Add virtual nodes để balance tốt hơn   |
+| 3.3: Unit test ConsistentHash      | **Linh** | 1h   | Test hash distribution                 |
 
-- [ ] Anti-entropy mechanism (optional)
-  - Compare checksums giữa nodes
-  - Sync missing/outdated data
-- [ ] Testing recovery
-  - Stop node → delete Redis data
-  - Restart node → verify data recovery
+### 🔧 Tasks - Day 2
 
-**Deliverable:** Node recover được data sau restart
+| Task                              | Owner    | Time | Description                           |
+| --------------------------------- | -------- | ---- | ------------------------------------- |
+| 3.4: MembershipManager            | **Linh** | 2h   | Load cluster config, manage node list |
+| 3.5: Determine owner node         | **Bình** | 2h   | Logic xác định key thuộc node nào     |
+| 3.6: Implement request forwarding | **Bình** | 3h   | Forward request đến đúng node         |
 
----
+### 🔧 Tasks - Day 3
 
-### **Phase 6: Client & CLI (2-3 ngày)**
+| Task                      | Owner    | Time | Description                          |
+| ------------------------- | -------- | ---- | ------------------------------------ |
+| 3.7: NodeService handlers | **Bình** | 2h   | Implement ForwardPut/Get/Delete      |
+| 3.8: Start 3 nodes script | **Linh** | 1h   | Script để start 3 nodes dễ dàng      |
+| 3.9: Test distribution    | **Bình** | 3h   | Test data phân chia đều giữa 3 nodes |
 
-#### Tuần 6 - Ngày 1-2:
+### ✅ Success Criteria (Phase 3)
 
-- [ ] Implement `KVStoreClient.java`
-  - Connect đến multiple nodes (load balancing)
-  - Retry logic
-  - Timeout handling
-- [ ] Implement `ClientCLI.java`
-  - Interactive command-line
-  - Commands: PUT, GET, DELETE, LIST
-  - Pretty output
-
-**Deliverable:** User-friendly client application
+- [ ] Start 3 nodes thành công
+- [ ] Client connect đến bất kỳ node nào
+- [ ] PUT key → Data lưu vào đúng owner node
+- [ ] GET key từ node khác → Forward và trả về đúng
+- [ ] Data distribution tương đối đều (~33% mỗi node)
 
 ---
 
-### **Phase 7: Testing & Documentation (4-5 ngày)**
+## 📋 Phase 4: Replication (2 ngày)
 
-#### Tuần 7 - Ngày 1-2:
+**Goal**: Mỗi key có 2 copies (primary + 1 replica)
 
-- [ ] Unit tests
-  - ConsistentHashTest
-  - StorageEngineTest
-  - ReplicationManagerTest
-- [ ] Integration tests
-  - Full cluster test
-  - Failure scenarios
-  - Recovery scenarios
+### 🔧 Tasks - Day 1
 
-#### Tuần 7 - Ngày 3-5:
+| Task                        | Owner    | Time | Description                         |
+| --------------------------- | -------- | ---- | ----------------------------------- |
+| 4.1: ReplicationManager     | **Linh** | 2h   | Class quản lý replication           |
+| 4.2: Determine replica node | **Linh** | 2h   | Logic chọn replica node (successor) |
+| 4.3: Replicate RPC call     | **Linh** | 2h   | Gửi ReplicateRequest đến replica    |
 
-- [ ] Viết báo cáo (8-10 trang):
-  - Kiến trúc tổng thể
-  - Giao thức truyền thông (gRPC + Protobuf)
-  - Consistent hashing algorithm
-  - Replication strategy
-  - Failure detection mechanism
-  - Recovery protocol
-  - Limitations & future improvements
-- [ ] Tạo diagrams:
-  - Architecture diagram
-  - Sequence diagrams (PUT/GET flow)
-  - State diagrams (node lifecycle)
+### 🔧 Tasks - Day 2
 
-**Deliverable:** Complete documentation & test suite
+| Task                          | Owner    | Time | Description                              |
+| ----------------------------- | -------- | ---- | ---------------------------------------- |
+| 4.4: Handle Replicate request | **Bình** | 2h   | Xử lý ReplicateRequest trong NodeService |
+| 4.5: Update PUT flow          | **Bình** | 2h   | PUT → Save local + Replicate             |
+| 4.6: Update DELETE flow       | **Bình** | 1h   | DELETE → Delete local + Replicate delete |
+| 4.7: Test replication         | **Bình** | 2h   | Verify mỗi key có 2 copies               |
+
+### ✅ Success Criteria (Phase 4)
+
+- [ ] PUT key → 2 nodes có data (primary + replica)
+- [ ] Verify data tồn tại trên cả 2 nodes
+- [ ] DELETE key → Xóa trên cả 2 nodes
+- [ ] Replication không block client (async nếu có thể)
 
 ---
 
-### **Phase 8: Demo Preparation (2 ngày)**
+## 📋 Phase 5: Failure Detection (2 ngày)
 
-- [ ] Prepare demo script
-- [ ] Test scenarios:
-  1. Normal operations (PUT/GET/DELETE)
-  2. Node failure handling
-  3. Data recovery
-  4. Load distribution
-- [ ] Prepare presentation slides
-- [ ] Record demo video (backup)
+**Goal**: Phát hiện node failure và redirect requests
+
+### 🔧 Tasks - Day 1
+
+| Task                    | Owner    | Time | Description                              |
+| ----------------------- | -------- | ---- | ---------------------------------------- |
+| 5.1: Heartbeat sender   | **Linh** | 2h   | Thread gửi heartbeat mỗi 5 giây          |
+| 5.2: Heartbeat receiver | **Linh** | 2h   | Handler nhận heartbeat, update timestamp |
+| 5.3: Failure detector   | **Linh** | 2h   | Check timeout (15 giây)                  |
+
+### 🔧 Tasks - Day 2
+
+| Task                       | Owner    | Time | Description                     |
+| -------------------------- | -------- | ---- | ------------------------------- |
+| 5.4: Update hash ring      | **Bình** | 2h   | Remove failed node khỏi ring    |
+| 5.5: Redirect to replica   | **Bình** | 2h   | GET từ replica khi primary fail |
+| 5.6: Test failure scenario | **Bình** | 3h   | Kill 1 node → Verify reads work |
+
+### ✅ Success Criteria (Phase 5)
+
+- [ ] Nodes gửi heartbeat thành công
+- [ ] Kill node 1 → Hệ thống detect trong 15 giây
+- [ ] GET key của node 1 → Đọc từ replica
+- [ ] PUT requests redirect đến available nodes
 
 ---
 
-## ⚙️ Hướng Dẫn Cài Đặt
+## 📋 Phase 6: Data Recovery (2 ngày)
 
-### Prerequisites
+**Goal**: Node restart có thể recover data
 
-1. **Java Development Kit (JDK) 11+**
+### 🔧 Tasks - Day 1
 
-   ```bash
-   # Check Java version
-   java -version
-   javac -version
-   ```
+| Task                        | Owner    | Time | Description                      |
+| --------------------------- | -------- | ---- | -------------------------------- |
+| 6.1: GetSnapshot handler    | **Linh** | 2h   | Handler trả về all data          |
+| 6.2: Snapshot serialization | **Linh** | 2h   | Efficient batch transfer         |
+| 6.3: Recovery on startup    | **Linh** | 2h   | Detect restart, request snapshot |
 
-2. **Apache Maven 3.8+**
+### 🔧 Tasks - Day 2
 
-   ```bash
-   # Check Maven version
-   mvn -version
-   ```
+| Task                           | Owner    | Time | Description                                |
+| ------------------------------ | -------- | ---- | ------------------------------------------ |
+| 6.4: Load snapshot to storage  | **Bình** | 2h   | Parse và load data vào storage             |
+| 6.5: Test recovery             | **Bình** | 3h   | Stop node → Delete data → Restart → Verify |
+| 6.6: Handle concurrent updates | **Bình** | 2h   | Conflict resolution (last-write-wins)      |
 
-3. **Redis Server 7.x**
+### ✅ Success Criteria (Phase 6)
 
-   ```bash
-   # Windows: Download từ https://redis.io/download
-   # hoặc dùng WSL/Docker
+- [ ] Stop node → Delete storage
+- [ ] Restart node → Auto request snapshot
+- [ ] Data recovered hoàn toàn
+- [ ] Node rejoin cluster và hoạt động bình thường
 
-   # Linux/Mac:
-   sudo apt-get install redis-server
-   # hoặc
-   brew install redis
-   ```
+---
 
-4. **Git** (để clone project)
+## 📋 Phase 7: Redis Integration (Optional - 1 ngày)
 
-### Build Project
+**Goal**: Chuyển từ in-memory dict sang Redis persistent storage
+
+### 🔧 Tasks
+
+| Task                        | Owner    | Time | Description                                |
+| --------------------------- | -------- | ---- | ------------------------------------------ |
+| 7.1: Redis connection       | **Linh** | 1h   | Setup Redis connection pool                |
+| 7.2: Update StorageEngine   | **Bình** | 2h   | Replace dict operations với Redis commands |
+| 7.3: Config Redis instances | **Linh** | 1h   | Start 3 Redis instances                    |
+| 7.4: Test persistence       | **Bình** | 2h   | Restart node → Data vẫn còn                |
+
+### ✅ Success Criteria (Phase 7)
+
+- [ ] Data lưu trong Redis thay vì dict
+- [ ] Restart node → Data persist (không mất)
+- [ ] Performance tốt (Redis in-memory)
+
+---
+
+## 🧪 Testing Checklist
+
+Sau mỗi phase, **Bình** phải test đầy đủ:
+
+### Phase 2 Test:
 
 ```bash
-# 1. Clone repository
-git clone <repository-url>
-cd distributed-kvstore
+# Terminal 1
+python src/server.py 8001
 
-# 2. Build project
-mvn clean install
-
-# Build sẽ:
-# - Download tất cả dependencies
-# - Generate Java code từ .proto files
-# - Compile Java source
-# - Run unit tests
-# - Package thành executable JAR
+# Terminal 2
+python src/client.py
+# Expected: PUT/GET/DELETE thành công
 ```
 
-### Setup Redis Instances
-
-Tạo 3 Redis instances cho 3 nodes:
-
-**Option 1: Dùng Redis config files**
+### Phase 3 Test:
 
 ```bash
-# Tạo 3 config files
-# config/redis-6379.conf
-port 6379
-dir ./data/redis1
-dbfilename dump1.rdb
+# Start 3 nodes
+python src/server.py 8001 &
+python src/server.py 8002 &
+python src/server.py 8003 &
 
-# config/redis-6380.conf
-port 6380
-dir ./data/redis2
-dbfilename dump2.rdb
-
-# config/redis-6381.conf
-port 6381
-dir ./data/redis3
-dbfilename dump3.rdb
-
-# Start Redis instances
-redis-server config/redis-6379.conf
-redis-server config/redis-6380.conf
-redis-server config/redis-6381.conf
+# Test client connect random node
+python src/client.py --node-port 8002
+# Expected: Data routing đúng
 ```
 
-**Option 2: Dùng Docker**
+### Phase 4 Test:
 
 ```bash
-# docker-compose.yml
-version: '3'
-services:
-  redis1:
-    image: redis:7
-    ports:
-      - "6379:6379"
-  redis2:
-    image: redis:7
-    ports:
-      - "6380:6379"
-  redis3:
-    image: redis:7
-    ports:
-      - "6381:6379"
+# PUT data
+# Check trên 2 nodes có data
+# Expected: 2 copies tồn tại
+```
 
-# Start
-docker-compose up -d
+### Phase 5 Test:
+
+```bash
+# Start 3 nodes
+# Kill node 1 (Ctrl+C)
+# GET data của node 1
+# Expected: Read từ replica thành công
+```
+
+### Phase 6 Test:
+
+```bash
+# Stop node 2
+# Delete node 2 data
+# Restart node 2
+# Check data
+# Expected: Data recovered
 ```
 
 ---
 
-## 🚀 Hướng Dẫn Chạy
+## 📊 Timeline Summary
 
-### Start Cluster (3 Nodes)
+| Phase     | Duration    | Linh Tasks | Bình Tasks | Total   |
+| --------- | ----------- | ---------- | ---------- | ------- |
+| Phase 1   | 1 day       | 2.5h       | 0.5h       | 3h      |
+| Phase 2   | 2 days      | 7h         | 4h         | 11h     |
+| Phase 3   | 3 days      | 8h         | 10h        | 18h     |
+| Phase 4   | 2 days      | 6h         | 7h         | 13h     |
+| Phase 5   | 2 days      | 6h         | 7h         | 13h     |
+| Phase 6   | 2 days      | 6h         | 7h         | 13h     |
+| Phase 7   | 1 day (opt) | 2h         | 4h         | 6h      |
+| **Total** | **13 days** | **37.5h**  | **39.5h**  | **77h** |
 
-**Terminal 1 - Node 1:**
+---
 
-```bash
-java -jar target/kvstore-1.0.0.jar \
-  --node-id=node1 \
-  --port=8001 \
-  --redis-host=localhost \
-  --redis-port=6379 \
-  --config=config/cluster.json
-```
+## 🚀 Quick Start
 
-**Terminal 2 - Node 2:**
-
-```bash
-java -jar target/kvstore-1.0.0.jar \
-  --node-id=node2 \
-  --port=8002 \
-  --redis-host=localhost \
-  --redis-port=6380 \
-  --config=config/cluster.json
-```
-
-**Terminal 3 - Node 3:**
+### 1. Setup Dependencies
 
 ```bash
-java -jar target/kvstore-1.0.0.jar \
-  --node-id=node3 \
-  --port=8003 \
-  --redis-host=localhost \
-  --redis-port=6381 \
-  --config=config/cluster.json
+pip install -r requirements.txt
 ```
 
-### Run Client
+### 2. Generate gRPC Code
 
 ```bash
-# Interactive mode
-java -cp target/kvstore-1.0.0.jar \
-  com.distributed.kvstore.client.ClientCLI \
-  --nodes=localhost:8001,localhost:8002,localhost:8003
-
-# Commands trong CLI:
-> PUT user:1 {"name":"John","age":30}
-> GET user:1
-> DELETE user:1
-> LIST
-> EXIT
+python generate_grpc.py
 ```
 
-### Configuration Files
+### 3. Start Server (Phase 2+)
 
-**config/cluster.json:**
+```bash
+python src/server.py 8001
+```
 
-```json
-{
-  "cluster_name": "kvstore-cluster",
-  "nodes": [
-    {
-      "id": "node1",
-      "host": "localhost",
-      "port": 8001
-    },
-    {
-      "id": "node2",
-      "host": "localhost",
-      "port": 8002
-    },
-    {
-      "id": "node3",
-      "host": "localhost",
-      "port": 8003
-    }
-  ],
-  "replication_factor": 2,
-  "heartbeat_interval_ms": 5000,
-  "failure_timeout_ms": 15000
-}
+### 4. Run Client Test
+
+```bash
+python src/client.py
 ```
 
 ---
 
-## 🧪 Testing
+## 📝 Notes
 
-### Unit Tests
-
-```bash
-# Run all tests
-mvn test
-
-# Run specific test
-mvn test -Dtest=ConsistentHashTest
-```
-
-### Integration Test
-
-```bash
-# Start cluster và run integration tests
-mvn verify
-```
-
-### Manual Testing Scenarios
-
-**Scenario 1: Normal Operations**
-
-```bash
-# PUT 10 keys
-PUT key1 value1
-PUT key2 value2
-...
-
-# Verify distribution across nodes
-# Check Redis instances:
-redis-cli -p 6379 KEYS "*"
-redis-cli -p 6380 KEYS "*"
-redis-cli -p 6381 KEYS "*"
-```
-
-**Scenario 2: Node Failure**
-
-```bash
-# 1. PUT keys
-PUT test_key test_value
-
-# 2. Kill node1 (Ctrl+C trong terminal 1)
-
-# 3. GET key từ client
-GET test_key  # Should still work (từ replica)
-```
-
-**Scenario 3: Data Recovery**
-
-```bash
-# 1. Stop node1
-# 2. Flush Redis: redis-cli -p 6379 FLUSHALL
-# 3. Restart node1
-# 4. Check data recovered: GET các keys
-```
+- **Code review**: Bình review code của Linh trước khi integrate
+- **Testing**: Không skip testing, phase nào chưa pass không sang phase khác
+- **Documentation**: Update README nếu có thay đổi lớn
+- **Git workflow**: Mỗi phase tạo 1 branch riêng, merge sau khi test pass
 
 ---
 
-## 📚 Tài Liệu Kỹ Thuật
+## 🎯 Success Metrics
 
-### gRPC Protocol
+Project hoàn thành khi:
 
-- **Client → Node**: `KeyValueStore` service
-- **Node → Node**: `NodeService` service
-- **Serialization**: Protocol Buffers (binary, efficient)
-- **Transport**: HTTP/2 over TCP
+- ✅ All phases test pass
+- ✅ 3 nodes hoạt động đồng thời
+- ✅ Failure tolerance hoạt động
+- ✅ Data recovery hoạt động
+- ✅ Code clean, có comments
+- ✅ README đầy đủ hướng dẫn
 
-### Consistent Hashing
-
-```
-Hash Ring (0 - 2^32):
-                    Node1 (hash=100)
-                   /
-    Node3 --------●-----------● Node2
-   (hash=300)                (hash=200)
-
-Key "user:1" → hash = 150 → Node2 (first node >= 150)
-Replica → Node3 (next node in ring)
-```
-
-### Replication Flow
-
-```
-Client → PUT(key, value)
-   ↓
-Node1 (receives request)
-   ↓
-1. Check hash → This node is primary? YES
-2. Save to local Redis
-3. Determine replica node (Node2)
-4. RPC: Node2.Replicate(key, value)
-5. Wait for ACK from Node2
-6. Return success to client
-```
-
-### Failure Detection
-
-```
-Every 5 seconds:
-Node1 → Heartbeat → Node2
-Node1 → Heartbeat → Node3
-Node2 → Heartbeat → Node1
-Node2 → Heartbeat → Node3
-...
-
-If no heartbeat from NodeX > 15 seconds:
-→ Mark NodeX as FAILED
-→ Update hash ring
-→ Redirect requests
-```
-
----
-
-## 🔧 Troubleshooting
-
-### Issue: Cannot connect to Redis
-
-```bash
-# Check Redis is running
-redis-cli -p 6379 PING
-# Should return: PONG
-
-# Check Redis logs
-tail -f /var/log/redis/redis-server.log
-```
-
-### Issue: gRPC connection refused
-
-```bash
-# Check port is listening
-netstat -an | grep 8001
-
-# Check firewall
-# Windows: Windows Defender Firewall
-# Linux: sudo ufw status
-```
-
-### Issue: Port already in use
-
-```bash
-# Find process using port
-# Windows:
-netstat -ano | findstr :8001
-taskkill /PID <pid> /F
-
-# Linux:
-lsof -i :8001
-kill -9 <pid>
-```
-
----
-
-## 👥 Team Members
-
-- Member 1: [Tên] - [Vai trò]
-- Member 2: [Tên] - [Vai trò]
-- Member 3: [Tên] - [Vai trò]
-
----
-
-## 📖 References
-
-- [gRPC Java Documentation](https://grpc.io/docs/languages/java/)
-- [Protocol Buffers Guide](https://protobuf.dev/getting-started/javatutorial/)
-- [Redis Documentation](https://redis.io/docs/)
-- [Jedis GitHub](https://github.com/redis/jedis)
-- [Consistent Hashing](https://en.wikipedia.org/wiki/Consistent_hashing)
-
----
-
-## 📝 License
-
-MIT License - Free for educational purposes
-
----
-
-**Last Updated**: Phase 1 - January 15, 2026
+**Good luck team! 🚀**
