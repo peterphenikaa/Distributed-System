@@ -40,11 +40,10 @@ command = [
     "python",
     "-m",
     "grpc_tools.protoc",
-    f"--proto_path={OUTPUT_DIR}", # thư mục chứa .proto
-    f"--python_out={OUTPUT_DIR}", # thư mục output file message
-    f"--grpc_python_out={OUTPUT_DIR}", # thư mục output file service stub
-    PROTO_FILE, # file .proto cần biên dịch
-    
+    f"--proto_path={BASE_DIR}", # thư mục root để tìm proto
+    f"--python_out={BASE_DIR}", # output vào root
+    f"--grpc_python_out={BASE_DIR}", # output vào root
+    "src/proto/kvstore.proto", # path relative từ root
 ]
 print(f"[OK] Command: {' '.join(command)}")
 

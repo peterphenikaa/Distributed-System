@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from proto import kvstore_pb2 as proto_dot_kvstore__pb2
+from src.proto import kvstore_pb2 as src_dot_proto_dot_kvstore__pb2
 
 
 class KeyValueStoreStub(object):
@@ -19,23 +19,23 @@ class KeyValueStoreStub(object):
         """
         self.Put = channel.unary_unary(
                 '/kvstore.KeyValueStore/Put',
-                request_serializer=proto_dot_kvstore__pb2.PutRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.PutResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.PutRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.PutResponse.FromString,
                 )
         self.Get = channel.unary_unary(
                 '/kvstore.KeyValueStore/Get',
-                request_serializer=proto_dot_kvstore__pb2.GetRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.GetResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.GetRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.GetResponse.FromString,
                 )
         self.Delete = channel.unary_unary(
                 '/kvstore.KeyValueStore/Delete',
-                request_serializer=proto_dot_kvstore__pb2.DeleteRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.DeleteResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.DeleteRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.DeleteResponse.FromString,
                 )
         self.ListKeys = channel.unary_unary(
                 '/kvstore.KeyValueStore/ListKeys',
-                request_serializer=proto_dot_kvstore__pb2.ListKeysRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.ListKeysResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.ListKeysRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.ListKeysResponse.FromString,
                 )
 
 
@@ -82,23 +82,23 @@ def add_KeyValueStoreServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Put': grpc.unary_unary_rpc_method_handler(
                     servicer.Put,
-                    request_deserializer=proto_dot_kvstore__pb2.PutRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.PutResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.PutRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.PutResponse.SerializeToString,
             ),
             'Get': grpc.unary_unary_rpc_method_handler(
                     servicer.Get,
-                    request_deserializer=proto_dot_kvstore__pb2.GetRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.GetResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.GetRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.GetResponse.SerializeToString,
             ),
             'Delete': grpc.unary_unary_rpc_method_handler(
                     servicer.Delete,
-                    request_deserializer=proto_dot_kvstore__pb2.DeleteRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.DeleteResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.DeleteRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.DeleteResponse.SerializeToString,
             ),
             'ListKeys': grpc.unary_unary_rpc_method_handler(
                     servicer.ListKeys,
-                    request_deserializer=proto_dot_kvstore__pb2.ListKeysRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.ListKeysResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.ListKeysRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.ListKeysResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -125,8 +125,8 @@ class KeyValueStore(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.KeyValueStore/Put',
-            proto_dot_kvstore__pb2.PutRequest.SerializeToString,
-            proto_dot_kvstore__pb2.PutResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.PutRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.PutResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -142,8 +142,8 @@ class KeyValueStore(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.KeyValueStore/Get',
-            proto_dot_kvstore__pb2.GetRequest.SerializeToString,
-            proto_dot_kvstore__pb2.GetResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.GetRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.GetResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -159,8 +159,8 @@ class KeyValueStore(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.KeyValueStore/Delete',
-            proto_dot_kvstore__pb2.DeleteRequest.SerializeToString,
-            proto_dot_kvstore__pb2.DeleteResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.DeleteRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.DeleteResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -176,8 +176,8 @@ class KeyValueStore(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.KeyValueStore/ListKeys',
-            proto_dot_kvstore__pb2.ListKeysRequest.SerializeToString,
-            proto_dot_kvstore__pb2.ListKeysResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.ListKeysRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.ListKeysResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -196,43 +196,43 @@ class NodeServiceStub(object):
         """
         self.Heartbeat = channel.unary_unary(
                 '/kvstore.NodeService/Heartbeat',
-                request_serializer=proto_dot_kvstore__pb2.HeartbeatRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.HeartbeatResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.HeartbeatRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.HeartbeatResponse.FromString,
                 )
         self.ForwardPut = channel.unary_unary(
                 '/kvstore.NodeService/ForwardPut',
-                request_serializer=proto_dot_kvstore__pb2.ForwardPutRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.ForwardPutResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.ForwardPutRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.ForwardPutResponse.FromString,
                 )
         self.ForwardGet = channel.unary_unary(
                 '/kvstore.NodeService/ForwardGet',
-                request_serializer=proto_dot_kvstore__pb2.ForwardGetRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.ForwardGetResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.ForwardGetRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.ForwardGetResponse.FromString,
                 )
         self.ForwardDelete = channel.unary_unary(
                 '/kvstore.NodeService/ForwardDelete',
-                request_serializer=proto_dot_kvstore__pb2.ForwardDeleteRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.ForwardDeleteResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.ForwardDeleteRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.ForwardDeleteResponse.FromString,
                 )
         self.Replicate = channel.unary_unary(
                 '/kvstore.NodeService/Replicate',
-                request_serializer=proto_dot_kvstore__pb2.ReplicateRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.ReplicateResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.ReplicateRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.ReplicateResponse.FromString,
                 )
         self.GetSnapshot = channel.unary_unary(
                 '/kvstore.NodeService/GetSnapshot',
-                request_serializer=proto_dot_kvstore__pb2.SnapshotRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.SnapshotResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.SnapshotRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.SnapshotResponse.FromString,
                 )
         self.JoinCluster = channel.unary_unary(
                 '/kvstore.NodeService/JoinCluster',
-                request_serializer=proto_dot_kvstore__pb2.JoinRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.JoinResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.JoinRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.JoinResponse.FromString,
                 )
         self.GetMembership = channel.unary_unary(
                 '/kvstore.NodeService/GetMembership',
-                request_serializer=proto_dot_kvstore__pb2.MembershipRequest.SerializeToString,
-                response_deserializer=proto_dot_kvstore__pb2.MembershipResponse.FromString,
+                request_serializer=src_dot_proto_dot_kvstore__pb2.MembershipRequest.SerializeToString,
+                response_deserializer=src_dot_proto_dot_kvstore__pb2.MembershipResponse.FromString,
                 )
 
 
@@ -305,43 +305,43 @@ def add_NodeServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Heartbeat': grpc.unary_unary_rpc_method_handler(
                     servicer.Heartbeat,
-                    request_deserializer=proto_dot_kvstore__pb2.HeartbeatRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.HeartbeatResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.HeartbeatRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.HeartbeatResponse.SerializeToString,
             ),
             'ForwardPut': grpc.unary_unary_rpc_method_handler(
                     servicer.ForwardPut,
-                    request_deserializer=proto_dot_kvstore__pb2.ForwardPutRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.ForwardPutResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.ForwardPutRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.ForwardPutResponse.SerializeToString,
             ),
             'ForwardGet': grpc.unary_unary_rpc_method_handler(
                     servicer.ForwardGet,
-                    request_deserializer=proto_dot_kvstore__pb2.ForwardGetRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.ForwardGetResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.ForwardGetRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.ForwardGetResponse.SerializeToString,
             ),
             'ForwardDelete': grpc.unary_unary_rpc_method_handler(
                     servicer.ForwardDelete,
-                    request_deserializer=proto_dot_kvstore__pb2.ForwardDeleteRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.ForwardDeleteResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.ForwardDeleteRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.ForwardDeleteResponse.SerializeToString,
             ),
             'Replicate': grpc.unary_unary_rpc_method_handler(
                     servicer.Replicate,
-                    request_deserializer=proto_dot_kvstore__pb2.ReplicateRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.ReplicateResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.ReplicateRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.ReplicateResponse.SerializeToString,
             ),
             'GetSnapshot': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSnapshot,
-                    request_deserializer=proto_dot_kvstore__pb2.SnapshotRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.SnapshotResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.SnapshotRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.SnapshotResponse.SerializeToString,
             ),
             'JoinCluster': grpc.unary_unary_rpc_method_handler(
                     servicer.JoinCluster,
-                    request_deserializer=proto_dot_kvstore__pb2.JoinRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.JoinResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.JoinRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.JoinResponse.SerializeToString,
             ),
             'GetMembership': grpc.unary_unary_rpc_method_handler(
                     servicer.GetMembership,
-                    request_deserializer=proto_dot_kvstore__pb2.MembershipRequest.FromString,
-                    response_serializer=proto_dot_kvstore__pb2.MembershipResponse.SerializeToString,
+                    request_deserializer=src_dot_proto_dot_kvstore__pb2.MembershipRequest.FromString,
+                    response_serializer=src_dot_proto_dot_kvstore__pb2.MembershipResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -368,8 +368,8 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/Heartbeat',
-            proto_dot_kvstore__pb2.HeartbeatRequest.SerializeToString,
-            proto_dot_kvstore__pb2.HeartbeatResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.HeartbeatRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.HeartbeatResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -385,8 +385,8 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/ForwardPut',
-            proto_dot_kvstore__pb2.ForwardPutRequest.SerializeToString,
-            proto_dot_kvstore__pb2.ForwardPutResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.ForwardPutRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.ForwardPutResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -402,8 +402,8 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/ForwardGet',
-            proto_dot_kvstore__pb2.ForwardGetRequest.SerializeToString,
-            proto_dot_kvstore__pb2.ForwardGetResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.ForwardGetRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.ForwardGetResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -419,8 +419,8 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/ForwardDelete',
-            proto_dot_kvstore__pb2.ForwardDeleteRequest.SerializeToString,
-            proto_dot_kvstore__pb2.ForwardDeleteResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.ForwardDeleteRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.ForwardDeleteResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -436,8 +436,8 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/Replicate',
-            proto_dot_kvstore__pb2.ReplicateRequest.SerializeToString,
-            proto_dot_kvstore__pb2.ReplicateResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.ReplicateRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.ReplicateResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -453,8 +453,8 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/GetSnapshot',
-            proto_dot_kvstore__pb2.SnapshotRequest.SerializeToString,
-            proto_dot_kvstore__pb2.SnapshotResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.SnapshotRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.SnapshotResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -470,8 +470,8 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/JoinCluster',
-            proto_dot_kvstore__pb2.JoinRequest.SerializeToString,
-            proto_dot_kvstore__pb2.JoinResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.JoinRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.JoinResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -487,7 +487,7 @@ class NodeService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/kvstore.NodeService/GetMembership',
-            proto_dot_kvstore__pb2.MembershipRequest.SerializeToString,
-            proto_dot_kvstore__pb2.MembershipResponse.FromString,
+            src_dot_proto_dot_kvstore__pb2.MembershipRequest.SerializeToString,
+            src_dot_proto_dot_kvstore__pb2.MembershipResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

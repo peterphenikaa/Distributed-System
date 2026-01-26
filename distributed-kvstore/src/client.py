@@ -7,11 +7,13 @@ import sys  # Để command line arguments
 import os  # Để làm việc với đường dẫn
 import grpc  # gRPC library
 
-# Import generated gRPC code
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Fix import path - add project root to sys.path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
-import kvstore_pb2  # Generated message classes
-import kvstore_pb2_grpc  # Generated service stubs
+# Import generated gRPC code
+from src.proto import kvstore_pb2  # Generated message classes
+from src.proto import kvstore_pb2_grpc  # Generated service stubs
 
 # ============================================================================
 # PHẦN 1: Helper Functions
