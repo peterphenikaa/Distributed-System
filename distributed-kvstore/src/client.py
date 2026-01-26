@@ -294,3 +294,5 @@ if __name__ == '__main__':
         mode = sys.argv[2]
     
     main(server_address, mode)
+# gRPC Client implementation
+# TODO: Code here
