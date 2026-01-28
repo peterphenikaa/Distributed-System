@@ -17,6 +17,7 @@ sys.path.insert(0, project_root)
 # Import generated gRPC code
 from src.proto import kvstore_pb2  # Generated message classes
 from src.proto import kvstore_pb2_grpc  # Generated service stubs
+from src.storage.storage_engine import StorageEngine  # Storage engine
 
 # ============================================================================
 # PHẦN 1: Setup Logging
@@ -44,16 +45,18 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
     Methods: Put, Get, Delete, ListKeys
     """
 
-    def __init__(self, node_id: str, port: int):
+    def __init__(self, node_id: str, port: int, storage):
         """
         Initialize servicer.
         
         Args:
             node_id: ID của node này (e.g., "node1")
             port: Port mà server listen (e.g., 8001)
+            storage: StorageEngine instance
         """
         self.node_id = node_id
         self.port = port
+        self.storage = storage
         logger.info(f"KeyValueStoreServicer initialized for {node_id}:{port}")
 
     def Put(self, request, context):
@@ -70,6 +73,9 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
         logger.info(f"PUT request: key={request.key}, value={request.value}")
         
         try:
+            # Save to storage
+            self.storage.put(request.key, request.value)
+            
             response = kvstore_pb2.PutResponse(
                 success=True,
                 node_id=self.node_id,
@@ -98,13 +104,26 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
         logger.info(f"GET request: key={request.key}")
         
         try:
-            response = kvstore_pb2.GetResponse(
-                found=False,
-                value="",
-                node_id=self.node_id,
-                timestamp=int(time.time())
-            )
-            logger.info(f"GET: key={request.key}, found={response.found}")
+            # Get from storage
+            value, found = self.storage.get(request.key)
+            
+            if found:
+                response = kvstore_pb2.GetResponse(
+                    found=True,
+                    value=value,
+                    node_id=self.node_id,
+                    timestamp=int(time.time())
+                )
+                logger.info(f"GET: key={request.key}, found=True, value={value}")
+            else:
+                response = kvstore_pb2.GetResponse(
+                    found=False,
+                    value="",
+                    node_id=self.node_id,
+                    timestamp=int(time.time())
+                )
+                logger.info(f"GET: key={request.key}, found=False")
+            
             return response
             
         except Exception as e:
@@ -127,11 +146,19 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
         logger.info(f"DELETE request: key={request.key}")
         
         try:
+            # Delete from storage
+            deleted = self.storage.delete(request.key)
+            
             response = kvstore_pb2.DeleteResponse(
-                success=True,
+                success=deleted,
                 replicas_count=1
             )
-            logger.info(f"DELETE success: key={request.key}")
+            
+            if deleted:
+                logger.info(f"DELETE success: key={request.key}")
+            else:
+                logger.warning(f"DELETE: key not found: {request.key}")
+            
             return response
             
         except Exception as e:
@@ -155,10 +182,13 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
         logger.info("LISTKEYS request")
         
         try:
+            # Get all keys from storage
+            keys = self.storage.list_keys()
+            
             response = kvstore_pb2.ListKeysResponse(
-                keys=[]
+                keys=keys
             )
-            logger.info(f"LISTKEYS: returned {len(response.keys)} keys")
+            logger.info(f"LISTKEYS: returned {len(keys)} keys")
             return response
             
         except Exception as e:
@@ -331,7 +361,10 @@ def serve(node_id: str = "node1", port: int = 8001):
     executor = futures.ThreadPoolExecutor(max_workers=10)
     server = grpc.server(executor)
     
-    kv_servicer = KeyValueStoreServicer(node_id, port)
+    # Create storage engine
+    storage = StorageEngine()
+    
+    kv_servicer = KeyValueStoreServicer(node_id, port, storage)
     node_servicer = NodeServicer(node_id, port)
     
     kvstore_pb2_grpc.add_KeyValueStoreServicer_to_server(
