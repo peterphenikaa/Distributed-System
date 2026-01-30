@@ -240,17 +240,17 @@ distributed-kvstore/
 
 | Task                    | Owner    | Time | Description                              |
 | ----------------------- | -------- | ---- | ---------------------------------------- |
-| 5.1: Heartbeat sender   | **Bình** | 2h   | Thread gửi heartbeat mỗi 5 giây          |
-| 5.2: Heartbeat receiver | **Bình** | 2h   | Handler nhận heartbeat, update timestamp |
-| 5.3: Failure detector   | **Bình** | 2h   | Check timeout (15 giây)                  |
+| 5.1: Heartbeat sender   | **Linh** | 2h   | Thread gửi heartbeat mỗi 5 giây          |
+| 5.2: Heartbeat receiver | **Linh** | 2h   | Handler nhận heartbeat, update timestamp |
+| 5.3: Failure detector   | **Linh** | 2h   | Check timeout (15 giây)                  |
 
 ### 🔧 Tasks - Day 2
 
 | Task                       | Owner    | Time | Description                     |
 | -------------------------- | -------- | ---- | ------------------------------- |
-| 5.4: Update hash ring      | **Bình** | 2h   | Remove failed node khỏi ring    |
+| 5.4: Update hash ring      | **Linh** | 3h   | Remove failed node khỏi ring    |
 | 5.5: Redirect to replica   | **Bình** | 2h   | GET từ replica khi primary fail |
-| 5.6: Test failure scenario | **Bình** | 3h   | Kill 1 node → Verify reads work |
+| 5.6: Test failure scenario | **Bình** | 2h   | Kill 1 node → Verify reads work |
 
 ### ✅ Success Criteria (Phase 5)
 
@@ -265,22 +265,20 @@ distributed-kvstore/
 
 **Goal**: Node restart có thể recover data
 
-**Note**: Phase quan trọng, cần senior handle toàn bộ
-
 ### 🔧 Tasks - Day 1
 
 | Task                        | Owner    | Time | Description                      |
 | --------------------------- | -------- | ---- | -------------------------------- |
-| 6.1: GetSnapshot handler    | **Bình** | 2h   | Handler trả về all data          |
-| 6.2: Snapshot serialization | **Bình** | 2h   | Efficient batch transfer         |
-| 6.3: Recovery on startup    | **Bình** | 2h   | Detect restart, request snapshot |
+| 6.1: GetSnapshot handler    | **Linh** | 2h   | Handler trả về all data          |
+| 6.2: Snapshot serialization | **Linh** | 2h   | Efficient batch transfer         |
+| 6.3: Recovery on startup    | **Linh** | 2h   | Detect restart, request snapshot |
 
 ### 🔧 Tasks - Day 2
 
 | Task                           | Owner    | Time | Description                                |
 | ------------------------------ | -------- | ---- | ------------------------------------------ |
-| 6.4: Load snapshot to storage  | **Bình** | 2h   | Parse và load data vào storage             |
-| 6.5: Test recovery             | **Bình** | 3h   | Stop node → Delete data → Restart → Verify |
+| 6.4: Load snapshot to storage  | **Linh** | 3h   | Parse và load data vào storage             |
+| 6.5: Test recovery             | **Bình** | 2h   | Stop node → Delete data → Restart → Verify |
 | 6.6: Handle concurrent updates | **Bình** | 2h   | Conflict resolution (last-write-wins)      |
 
 ### ✅ Success Criteria (Phase 6)
@@ -302,10 +300,10 @@ distributed-kvstore/
 
 | Task                        | Owner    | Time | Description                                |
 | --------------------------- | -------- | ---- | ------------------------------------------ |
-| 7.1: Redis connection       | **Bình** | 1h   | Setup Redis connection pool                |
-| 7.2: Update StorageEngine   | **Bình** | 2h   | Replace dict operations với Redis commands |
+| 7.1: Redis connection       | **Linh** | 1h   | Setup Redis connection pool                |
+| 7.2: Update StorageEngine   | **Linh** | 3h   | Replace dict operations với Redis commands |
 | 7.3: Config Redis instances | **Bình** | 1h   | Start 3 Redis instances                    |
-| 7.4: Test persistence       | **Bình** | 2h   | Restart node → Data vẫn còn                |
+| 7.4: Test persistence       | **Bình** | 1h   | Restart node → Data vẫn còn                |
 
 ### ✅ Success Criteria (Phase 7)
 
@@ -370,33 +368,6 @@ python src/client.py --node-port 8002
 # Expected: Data recovered
 ```
 
----
-
-## 📊 Timeline Summary
-
-| Phase     | Duration    | Linh Tasks | Bình Tasks | Total   |
-| --------- | ----------- | ---------- | ---------- | ------- |
-| Phase 1   | 1 day       | 2.5h       | 0.5h       | 3h      |
-| Phase 2   | 2 days      | 7h         | 4h         | 11h     |
-| Phase 3   | 3 days      | 8h         | 10h        | 18h     |
-| Phase 4   | 2 days      | 6h         | 7h         | 13h     |
-| Phase 5   | 2 days      | 0h         | 13h        | 13h     |
-| Phase 6   | 2 days      | 0h         | 13h        | 13h     |
-| Phase 7   | 1 day (opt) | 0h         | 6h         | 6h      |
-| **Total** | **13 days** | **23.5h**  | **53.5h**  | **77h** |
-
-### 📌 Phân Tích Distribution:
-
-**Linh (Junior - 23.5h):**
-
-- Phase 1-4: Setup, basic features, foundation work
-- Focus: Learning gRPC, implementing basic storage, testing
-
-**Bình (Senior - 53.5h):**
-
-- Phase 1-4: Integration, advanced features, testing
-- Phase 5-7: **100% ownership** - Critical features (failure detection, recovery, Redis)
-- Rationale: Phases cuối phức tạp, cần senior experience
 
 ---
 
