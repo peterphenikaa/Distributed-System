@@ -192,11 +192,11 @@ distributed-kvstore/
 
 ### ✅ Success Criteria (Phase 3)
 
-- [ ] Start 3 nodes thành công
-- [ ] Client connect đến bất kỳ node nào
-- [ ] PUT key → Data lưu vào đúng owner node
-- [ ] GET key từ node khác → Forward và trả về đúng
-- [ ] Data distribution tương đối đều (~33% mỗi node)
+- [x] Start 3 nodes thành công
+- [x] Client connect đến bất kỳ node nào
+- [x] PUT key → Data lưu vào đúng owner node
+- [x] GET key từ node khác → Forward và trả về đúng
+- [x] Data distribution tương đối đều (~33% mỗi node)
 
 ---
 
@@ -367,7 +367,6 @@ python src/client.py --node-port 8002
 # Check data
 # Expected: Data recovered
 ```
-
 
 ---
 

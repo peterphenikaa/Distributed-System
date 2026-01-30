@@ -18,6 +18,7 @@ sys.path.insert(0, project_root)
 from src.proto import kvstore_pb2  # Generated message classes
 from src.proto import kvstore_pb2_grpc  # Generated service stubs
 from src.storage.storage_engine import StorageEngine  # Storage engine
+from src.membership_manager import MembershipManager  # Cluster membership
 
 # ============================================================================
 # PHẦN 1: Setup Logging
@@ -45,7 +46,7 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
     Methods: Put, Get, Delete, ListKeys
     """
 
-    def __init__(self, node_id: str, port: int, storage):
+    def __init__(self, node_id: str, port: int, storage, membership_manager):
         """
         Initialize servicer.
         
@@ -53,15 +54,19 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
             node_id: ID của node này (e.g., "node1")
             port: Port mà server listen (e.g., 8001)
             storage: StorageEngine instance
+            membership_manager: MembershipManager instance
         """
         self.node_id = node_id
         self.port = port
         self.storage = storage
+        self.membership = membership_manager
         logger.info(f"KeyValueStoreServicer initialized for {node_id}:{port}")
 
     def Put(self, request, context):
         """
         Handle PUT request từ client.
+        
+        Phase 3: Check if we're the owner, otherwise forward to owner node.
         
         Args:
             request: PutRequest message (key, value, timestamp)
@@ -73,17 +78,49 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
         logger.info(f"PUT request: key={request.key}, value={request.value}")
         
         try:
-            # Save to storage
-            self.storage.put(request.key, request.value)
+            # Task 3.5: Determine owner node
+            owner_node = self.membership.get_owner_node(request.key)
             
-            response = kvstore_pb2.PutResponse(
-                success=True,
-                node_id=self.node_id,
-                replicas_count=1
-            )
-            logger.info(f"PUT success: key={request.key}")
-            return response
+            if owner_node is None:
+                logger.error("No owner node found (cluster empty?)")
+                context.set_details("No available nodes")
+                context.set_code(grpc.StatusCode.UNAVAILABLE)
+                return kvstore_pb2.PutResponse(success=False)
             
+            # Task 3.6: Check if we're the owner
+            if owner_node.node_id == self.node_id:
+                # We're the owner - handle locally
+                logger.info(f"[LOCAL] This node owns key={request.key}")
+                self.storage.put(request.key, request.value)
+                
+                response = kvstore_pb2.PutResponse(
+                    success=True,
+                    node_id=self.node_id,
+                    replicas_count=1
+                )
+                logger.info(f"PUT success (local): key={request.key}")
+                return response
+            else:
+                # We're NOT the owner - forward to owner node
+                logger.info(f"[FORWARD] key={request.key} belongs to {owner_node.node_id}")
+                
+                # Forward to owner node
+                owner_address = owner_node.get_address()
+                channel = grpc.insecure_channel(owner_address)
+                stub = kvstore_pb2_grpc.NodeServiceStub(channel)
+                
+                # Call ForwardPut on owner node
+                forward_response = stub.ForwardPut(request, timeout=5.0)
+                channel.close()
+                
+                logger.info(f"PUT forwarded to {owner_node.node_id}: success={forward_response.success}")
+                return forward_response
+            
+        except grpc.RpcError as e:
+            logger.error(f"Forward PUT failed (gRPC error): {str(e)}")
+            context.set_details(f"Forward failed: {str(e)}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            return kvstore_pb2.PutResponse(success=False)
         except Exception as e:
             logger.error(f"PUT failed: {str(e)}")
             context.set_details(f"PUT failed: {str(e)}")
@@ -93,6 +130,8 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
     def Get(self, request, context):
         """
         Handle GET request từ client.
+        
+        Phase 3: Check if we're the owner, otherwise forward to owner node.
         
         Args:
             request: GetRequest message (key)
@@ -104,28 +143,50 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
         logger.info(f"GET request: key={request.key}")
         
         try:
-            # Get from storage
-            value, found = self.storage.get(request.key)
+            # Task 3.5: Determine owner node
+            owner_node = self.membership.get_owner_node(request.key)
             
-            if found:
+            if owner_node is None:
+                logger.error("No owner node found")
+                context.set_details("No available nodes")
+                context.set_code(grpc.StatusCode.UNAVAILABLE)
+                return kvstore_pb2.GetResponse(found=False)
+            
+            # Task 3.6: Check if we're the owner
+            if owner_node.node_id == self.node_id:
+                # We're the owner - handle locally
+                logger.info(f"[LOCAL] This node owns key={request.key}")
+                value, found = self.storage.get(request.key)
+                
                 response = kvstore_pb2.GetResponse(
-                    found=True,
-                    value=value,
+                    found=found,
+                    value=value if found else "",
                     node_id=self.node_id,
                     timestamp=int(time.time())
                 )
-                logger.info(f"GET: key={request.key}, found=True, value={value}")
+                logger.info(f"GET (local): key={request.key}, found={found}")
+                return response
             else:
-                response = kvstore_pb2.GetResponse(
-                    found=False,
-                    value="",
-                    node_id=self.node_id,
-                    timestamp=int(time.time())
-                )
-                logger.info(f"GET: key={request.key}, found=False")
+                # We're NOT the owner - forward to owner node
+                logger.info(f"[FORWARD] key={request.key} belongs to {owner_node.node_id}")
+                
+                # Forward to owner node
+                owner_address = owner_node.get_address()
+                channel = grpc.insecure_channel(owner_address)
+                stub = kvstore_pb2_grpc.NodeServiceStub(channel)
+                
+                # Call ForwardGet on owner node
+                forward_response = stub.ForwardGet(request, timeout=5.0)
+                channel.close()
+                
+                logger.info(f"GET forwarded to {owner_node.node_id}: found={forward_response.found}")
+                return forward_response
             
-            return response
-            
+        except grpc.RpcError as e:
+            logger.error(f"Forward GET failed (gRPC error): {str(e)}")
+            context.set_details(f"Forward failed: {str(e)}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            return kvstore_pb2.GetResponse(found=False)
         except Exception as e:
             logger.error(f"GET failed: {str(e)}")
             context.set_details(f"GET failed: {str(e)}")
@@ -135,6 +196,8 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
     def Delete(self, request, context):
         """
         Handle DELETE request từ client.
+        
+        Phase 3: Check if we're the owner, otherwise forward to owner node.
         
         Args:
             request: DeleteRequest message (key)
@@ -146,21 +209,53 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
         logger.info(f"DELETE request: key={request.key}")
         
         try:
-            # Delete from storage
-            deleted = self.storage.delete(request.key)
+            # Task 3.5: Determine owner node
+            owner_node = self.membership.get_owner_node(request.key)
             
-            response = kvstore_pb2.DeleteResponse(
-                success=deleted,
-                replicas_count=1
-            )
+            if owner_node is None:
+                logger.error("No owner node found")
+                context.set_details("No available nodes")
+                context.set_code(grpc.StatusCode.UNAVAILABLE)
+                return kvstore_pb2.DeleteResponse(success=False)
             
-            if deleted:
-                logger.info(f"DELETE success: key={request.key}")
+            # Task 3.6: Check if we're the owner
+            if owner_node.node_id == self.node_id:
+                # We're the owner - handle locally
+                logger.info(f"[LOCAL] This node owns key={request.key}")
+                deleted = self.storage.delete(request.key)
+                
+                response = kvstore_pb2.DeleteResponse(
+                    success=deleted,
+                    replicas_count=1
+                )
+                
+                if deleted:
+                    logger.info(f"DELETE success (local): key={request.key}")
+                else:
+                    logger.warning(f"DELETE: key not found: {request.key}")
+                
+                return response
             else:
-                logger.warning(f"DELETE: key not found: {request.key}")
+                # We're NOT the owner - forward to owner node
+                logger.info(f"[FORWARD] key={request.key} belongs to {owner_node.node_id}")
+                
+                # Forward to owner node
+                owner_address = owner_node.get_address()
+                channel = grpc.insecure_channel(owner_address)
+                stub = kvstore_pb2_grpc.NodeServiceStub(channel)
+                
+                # Call ForwardDelete on owner node
+                forward_response = stub.ForwardDelete(request, timeout=5.0)
+                channel.close()
+                
+                logger.info(f"DELETE forwarded to {owner_node.node_id}: success={forward_response.success}")
+                return forward_response
             
-            return response
-            
+        except grpc.RpcError as e:
+            logger.error(f"Forward DELETE failed (gRPC error): {str(e)}")
+            context.set_details(f"Forward failed: {str(e)}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            return kvstore_pb2.DeleteResponse(success=False)
         except Exception as e:
             logger.error(f"DELETE failed: {str(e)}")
             context.set_details(f"DELETE failed: {str(e)}")
@@ -208,10 +303,18 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
     Dùng cho inter-node communication: replication, heartbeat, forwarding.
     """
 
-    def __init__(self, node_id: str, port: int):
-        """Initialize Node service."""
+    def __init__(self, node_id: str, port: int, storage):
+        """
+        Initialize Node service.
+        
+        Args:
+            node_id: Node ID
+            port: Port
+            storage: StorageEngine instance (for handling forwarded requests)
+        """
         self.node_id = node_id
         self.port = port
+        self.storage = storage
         logger.info(f"NodeServicer initialized for {node_id}:{port}")
 
     def Heartbeat(self, request, context):
@@ -235,15 +338,21 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
         """
         Handle forwarded PUT request từ node khác.
         Khi client PUT key thuộc node khác, node đó forward đến node này.
+        
+        Task 3.7: Implement actual storage logic.
         """
-        logger.info(f"ForwardPut: key={request.key}")
+        logger.info(f"[FORWARDED] ForwardPut: key={request.key}, value={request.value}")
         
         try:
+            # Save to local storage (we are the owner)
+            self.storage.put(request.key, request.value)
+            
             response = kvstore_pb2.PutResponse(
                 success=True,
                 node_id=self.node_id,
                 replicas_count=1
             )
+            logger.info(f"ForwardPut success: key={request.key}")
             return response
         except Exception as e:
             logger.error(f"ForwardPut failed: {str(e)}")
@@ -252,16 +361,24 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
             return kvstore_pb2.PutResponse(success=False)
 
     def ForwardGet(self, request, context):
-        """Handle forwarded GET request từ node khác."""
-        logger.info(f"ForwardGet: key={request.key}")
+        """
+        Handle forwarded GET request từ node khác.
+        
+        Task 3.7: Implement actual storage retrieval logic.
+        """
+        logger.info(f"[FORWARDED] ForwardGet: key={request.key}")
         
         try:
+            # Get from local storage (we are the owner)
+            value, found = self.storage.get(request.key)
+            
             response = kvstore_pb2.GetResponse(
-                found=False,
-                value="",
+                found=found,
+                value=value if found else "",
                 node_id=self.node_id,
                 timestamp=int(time.time())
             )
+            logger.info(f"ForwardGet: key={request.key}, found={found}")
             return response
         except Exception as e:
             logger.error(f"ForwardGet failed: {str(e)}")
@@ -270,14 +387,22 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
             return kvstore_pb2.GetResponse(found=False)
 
     def ForwardDelete(self, request, context):
-        """Handle forwarded DELETE request từ node khác."""
-        logger.info(f"ForwardDelete: key={request.key}")
+        """
+        Handle forwarded DELETE request từ node khác.
+        
+        Task 3.7: Implement actual storage deletion logic.
+        """
+        logger.info(f"[FORWARDED] ForwardDelete: key={request.key}")
         
         try:
+            # Delete from local storage (we are the owner)
+            deleted = self.storage.delete(request.key)
+            
             response = kvstore_pb2.DeleteResponse(
-                success=True,
+                success=deleted,
                 replicas_count=1
             )
+            logger.info(f"ForwardDelete: key={request.key}, deleted={deleted}")
             return response
         except Exception as e:
             logger.error(f"ForwardDelete failed: {str(e)}")
@@ -364,8 +489,13 @@ def serve(node_id: str = "node1", port: int = 8001):
     # Create storage engine
     storage = StorageEngine()
     
-    kv_servicer = KeyValueStoreServicer(node_id, port, storage)
-    node_servicer = NodeServicer(node_id, port)
+    # Load cluster membership (Phase 3)
+    config_path = os.path.join(project_root, "config", "cluster.json")
+    membership = MembershipManager(config_path)
+    logger.info(f"Loaded cluster config: {len(membership.get_all_nodes())} nodes")
+    
+    kv_servicer = KeyValueStoreServicer(node_id, port, storage, membership)
+    node_servicer = NodeServicer(node_id, port, storage)
     
     kvstore_pb2_grpc.add_KeyValueStoreServicer_to_server(
         kv_servicer, server

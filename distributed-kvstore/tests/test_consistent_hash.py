@@ -109,7 +109,7 @@ def test_membership_manager_load_config():
     """Test MembershipManager loading config."""
     print("\n=== Test 5: MembershipManager - Load Config ===")
     
-    config_path = "/workspaces/Distributed-System/distributed-kvstore/config/cluster.json"
+    config_path = os.path.join(project_root, "config", "cluster.json")
     mm = MembershipManager(config_path)
     
     # Test: Nodes loaded
@@ -134,7 +134,7 @@ def test_membership_manager_owner_node():
     """Test finding owner node for key."""
     print("\n=== Test 6: MembershipManager - Owner Node ===")
     
-    config_path = "/workspaces/Distributed-System/distributed-kvstore/config/cluster.json"
+    config_path = os.path.join(project_root, "config", "cluster.json")
     mm = MembershipManager(config_path)
     
     # Test: Get owner for key
@@ -167,7 +167,7 @@ def test_membership_manager_replicas():
     """Test finding replica nodes."""
     print("\n=== Test 7: MembershipManager - Replicas ===")
     
-    config_path = "/workspaces/Distributed-System/distributed-kvstore/config/cluster.json"
+    config_path = os.path.join(project_root, "config", "cluster.json")
     mm = MembershipManager(config_path)
     
     # Test: Get all replicas (including owner)
@@ -190,7 +190,7 @@ def test_membership_manager_node_status():
     """Test node alive/dead status."""
     print("\n=== Test 8: MembershipManager - Node Status ===")
     
-    config_path = "/workspaces/Distributed-System/distributed-kvstore/config/cluster.json"
+    config_path = os.path.join(project_root, "config", "cluster.json")
     mm = MembershipManager(config_path)
     
     # Test: All nodes initially alive
@@ -217,7 +217,7 @@ def test_membership_manager_dynamic_nodes():
     """Test dynamic node addition/removal."""
     print("\n=== Test 9: MembershipManager - Dynamic Nodes ===")
     
-    config_path = "/workspaces/Distributed-System/distributed-kvstore/config/cluster.json"
+    config_path = os.path.join(project_root, "config", "cluster.json")
     mm = MembershipManager(config_path)
     
     # Initial state
@@ -241,7 +241,7 @@ def test_hash_distribution_uniformity():
     """Test hash distribution uniformity across keys."""
     print("\n=== Test 10: Hash Distribution Uniformity ===")
     
-    config_path = "/workspaces/Distributed-System/distributed-kvstore/config/cluster.json"
+    config_path = os.path.join(project_root, "config", "cluster.json")
     mm = MembershipManager(config_path)
     
     # Distribute 1000 keys across nodes
