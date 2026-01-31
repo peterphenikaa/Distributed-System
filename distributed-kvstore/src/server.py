@@ -19,6 +19,7 @@ from src.proto import kvstore_pb2  # Generated message classes
 from src.proto import kvstore_pb2_grpc  # Generated service stubs
 from src.storage.storage_engine import StorageEngine  # Storage engine
 from src.membership_manager import MembershipManager  # Cluster membership
+from src.replication_manager import ReplicationManager  # Replication management
 
 # ============================================================================
 # PHẦN 1: Setup Logging
@@ -46,7 +47,7 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
     Methods: Put, Get, Delete, ListKeys
     """
 
-    def __init__(self, node_id: str, port: int, storage, membership_manager):
+    def __init__(self, node_id: str, port: int, storage, membership_manager, replication_manager):
         """
         Initialize servicer.
         
@@ -55,11 +56,13 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
             port: Port mà server listen (e.g., 8001)
             storage: StorageEngine instance
             membership_manager: MembershipManager instance
+            replication_manager: ReplicationManager instance
         """
         self.node_id = node_id
         self.port = port
         self.storage = storage
         self.membership = membership_manager
+        self.replication = replication_manager
         logger.info(f"KeyValueStoreServicer initialized for {node_id}:{port}")
 
     def Put(self, request, context):
@@ -93,12 +96,20 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
                 logger.info(f"[LOCAL] This node owns key={request.key}")
                 self.storage.put(request.key, request.value)
                 
+                # Task 4.3: Replicate PUT to replica nodes (async, non-blocking)
+                timestamp = int(time.time())
+                replicas_count = self.replication.replicate_put(
+                    request.key, 
+                    request.value, 
+                    timestamp
+                )
+                
                 response = kvstore_pb2.PutResponse(
                     success=True,
                     node_id=self.node_id,
-                    replicas_count=1
+                    replicas_count=replicas_count + 1  # +1 for primary
                 )
-                logger.info(f"PUT success (local): key={request.key}")
+                logger.info(f"PUT success (local): key={request.key}, replicas={replicas_count + 1}")
                 return response
             else:
                 # We're NOT the owner - forward to owner node
@@ -224,13 +235,20 @@ class KeyValueStoreServicer(kvstore_pb2_grpc.KeyValueStoreServicer):
                 logger.info(f"[LOCAL] This node owns key={request.key}")
                 deleted = self.storage.delete(request.key)
                 
+                # Task 4.3: Replicate DELETE to replica nodes (async, non-blocking)
+                if deleted:
+                    timestamp = int(time.time())
+                    replicas_count = self.replication.replicate_delete(request.key, timestamp)
+                else:
+                    replicas_count = 0
+                
                 response = kvstore_pb2.DeleteResponse(
                     success=deleted,
-                    replicas_count=1
+                    replicas_count=replicas_count + (1 if deleted else 0)
                 )
                 
                 if deleted:
-                    logger.info(f"DELETE success (local): key={request.key}")
+                    logger.info(f"DELETE success (local): key={request.key}, replicas={replicas_count + 1}")
                 else:
                     logger.warning(f"DELETE: key not found: {request.key}")
                 
@@ -303,7 +321,7 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
     Dùng cho inter-node communication: replication, heartbeat, forwarding.
     """
 
-    def __init__(self, node_id: str, port: int, storage):
+    def __init__(self, node_id: str, port: int, storage, replication_manager=None):
         """
         Initialize Node service.
         
@@ -311,10 +329,12 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
             node_id: Node ID
             port: Port
             storage: StorageEngine instance (for handling forwarded requests)
+            replication_manager: ReplicationManager instance (optional)
         """
         self.node_id = node_id
         self.port = port
         self.storage = storage
+        self.replication = replication_manager
         logger.info(f"NodeServicer initialized for {node_id}:{port}")
 
     def Heartbeat(self, request, context):
@@ -413,6 +433,42 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
     def Replicate(self, request, context):
         """
         Handle Replicate request từ primary node.
+        Lưu replicated data vào replica node này.
+        
+        Task 4.1-4.3: Handle replication requests (PUT or DELETE).
+        """
+        operation_name = "PUT" if request.operation == kvstore_pb2.PUT else "DELETE"
+        logger.info(f"[REPLICATE] {operation_name}: key={request.key} from {request.primary_node}")
+        
+        try:
+            # Handle based on operation type
+            success = False
+            
+            if request.operation == kvstore_pb2.PUT:
+                self.storage.put(request.key, request.value)
+                success = True
+                logger.info(f"Replicated PUT: key={request.key}, value={request.value}")
+                
+            elif request.operation == kvstore_pb2.DELETE:
+                deleted = self.storage.delete(request.key)
+                success = deleted
+                logger.info(f"Replicated DELETE: key={request.key}, deleted={deleted}")
+            
+            response = kvstore_pb2.ReplicateResponse(
+                success=success,
+                replica_node_id=self.node_id
+            )
+            return response
+            
+        except Exception as e:
+            logger.error(f"Replicate handler failed: {str(e)}")
+            context.set_details(str(e))
+            context.set_code(grpc.StatusCode.INTERNAL)
+            return kvstore_pb2.ReplicateResponse(success=False)
+
+    def Replicate(self, request, context):
+        """
+        Handle Replicate request từ primary node.
         Primary node gửi data đến replica node.
         """
         logger.info(f"Replicate: key={request.key}")
@@ -494,8 +550,12 @@ def serve(node_id: str = "node1", port: int = 8001):
     membership = MembershipManager(config_path)
     logger.info(f"Loaded cluster config: {len(membership.get_all_nodes())} nodes")
     
-    kv_servicer = KeyValueStoreServicer(node_id, port, storage, membership)
-    node_servicer = NodeServicer(node_id, port, storage)
+    # Create replication manager (Phase 4)
+    replication = ReplicationManager(membership, node_id)
+    logger.info(f"Initialized ReplicationManager for {node_id}")
+    
+    kv_servicer = KeyValueStoreServicer(node_id, port, storage, membership, replication)
+    node_servicer = NodeServicer(node_id, port, storage, replication)
     
     kvstore_pb2_grpc.add_KeyValueStoreServicer_to_server(
         kv_servicer, server
@@ -516,6 +576,7 @@ def serve(node_id: str = "node1", port: int = 8001):
             time.sleep(86400)
     except KeyboardInterrupt:
         logger.info("Shutting down server...")
+        replication.shutdown()
         server.stop(grace=5)
         logger.info("Server stopped")
 
