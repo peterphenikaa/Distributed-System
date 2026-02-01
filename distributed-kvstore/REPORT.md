@@ -8,12 +8,12 @@
 
 Dự án tập trung vào việc xây dựng một **Hệ thống lưu trữ Key-Value phân tán** (Distributed Key-Value Store). Đây là một hệ thống lưu trữ dữ liệu phi cấu trúc, cho phép nhiều nút (nodes) hoạt động phối hợp để cung cấp khả năng lưu trữ lớn, truy cập nhanh và đảm bảo tính toàn vẹn dữ liệu.
 
-Hệ thống được phát triển hoàn toàn từ đầu trên nền tảng **Python 3.11**, sử dụng khung giao tiếp **gRPC** (Google Remote Procedure Call) để đảm bảo hiệu suất cao trong giao tiếp giữa các nodes, và **Redis** làm lớp lưu trữ bền vững (persistence layer).
+Hệ thống được phát triển hoàn toàn từ đầu trên nền tảng **Python 3.11**, sử dụng khung giao tiếp **gRPC** (Google Remote Procedure Call) để đảm bảo hiệu suất cao trong giao tiếp giữa các nodes, và **in-memory storage** (thread-safe Python dict) làm lớp lưu trữ dữ liệu.
 
 **Kiến trúc tổng quan:**
 
 - 3 nodes độc lập hoạt động trên các cổng 8001, 8002, 8003
-- Mỗi node có instance Redis riêng (cổng 6379, 6380, 6381)
+- Mỗi node lưu trữ data trong RAM (thread-safe dictionary)
 - Giao tiếp client-server và peer-to-peer thông qua gRPC
 - Dữ liệu được phân phối tự động dựa trên **Consistent Hashing**
 - Hỗ trợ **Replication** (mỗi key có 2 bản sao) để đảm bảo tính sẵn sàng cao
@@ -544,8 +544,7 @@ class StorageEngine:
 **Hardware:**
 
 - CPU: 16 cores (AMD/Intel)
-- RAM: 16GB
-- Disk: SSD (cho Redis persistence)
+- RAM: 16GB (lưu trữ toàn bộ data trong RAM)
 - Network: Localhost (no latency)
 
 **Software:**
@@ -553,7 +552,6 @@ class StorageEngine:
 - OS: Windows 11 / Linux Ubuntu 22.04
 - Python: 3.11.5
 - gRPC: 1.62.0
-- Redis: 7.2.0
 - Protocol Buffers: 4.25.0
 
 **Cluster configuration:**
@@ -561,13 +559,15 @@ class StorageEngine:
 ```json
 {
   "nodes": [
-    { "id": "node1", "host": "localhost", "port": 8001, "redis_port": 6379 },
-    { "id": "node2", "host": "localhost", "port": 8002, "redis_port": 6380 },
-    { "id": "node3", "host": "localhost", "port": 8003, "redis_port": 6381 }
+    { "id": "node1", "host": "localhost", "port": 8001 },
+    { "id": "node2", "host": "localhost", "port": 8002 },
+    { "id": "node3", "host": "localhost", "port": 8003 }
   ],
   "replication": { "replication_factor": 2 },
   "consistent_hashing": { "virtual_nodes": 150 }
 }
+
+Note: redis_host và redis_port trong code là để chuẩn bị cho Phase 7 (optional)
 ```
 
 #### 3.2.2. Test scenarios
@@ -928,12 +928,14 @@ Dự án **Hệ thống lưu trữ Key-Value phân tán** đã được xây d�
 
 **Cải tiến tương lai:**
 
-1. **Redis Integration (Phase 7):**
+1. **Redis Integration (Phase 7 - Optional, CHƯA IMPLEMENT):**
 
    ```
    - Replace in-memory dict với Redis client
-   - Persistent storage cho durability
+   - Persistent storage cho durability (data tồn tại sau restart)
    - Checkpoint và snapshot tự động
+   - AOF/RDB persistence modes
+   - Hiện tại: Data lưu trong RAM, mất khi node restart
    ```
 
 2. **Advanced consistency:**
@@ -1050,11 +1052,6 @@ Kiến thức và kinh nghiệm thu được từ dự án có giá trị cao tr
    - https://protobuf.dev/programming-guides/proto3/
    - Proto message definitions và best practices
 
-6. **Redis Documentation**
-   - "Redis Persistence"
-   - https://redis.io/docs/management/persistence/
-   - Reference cho Phase 7 implementation
-
 ### 5.3. Books
 
 7. **Kleppmann, M. (2017)**
@@ -1091,11 +1088,7 @@ Kiến thức và kinh nghiệm thu được từ dự án có giá trị cao tr
     - https://github.com/grpc/grpc/tree/master/examples/python
     - gRPC Python examples
 
-14. **GitHub - redis/redis-py**
-    - https://github.com/redis/redis-py
-    - Redis Python client library
-
-15. **Project Repository**
+14. **Project Repository**
     - https://github.com/peterphenikaa/Distributed-System
     - Source code của dự án này
 
