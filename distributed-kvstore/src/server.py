@@ -9,6 +9,7 @@ import logging  # Để logging
 import grpc  # gRPC library
 from concurrent import futures  # ThreadPoolExecutor
 import time  # Để sleep
+import threading  # For background threads
 
 # Fix import path - add project root to sys.path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -435,7 +436,7 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
         Handle Replicate request từ primary node.
         Lưu replicated data vào replica node này.
         
-        Task 4.1-4.3: Handle replication requests (PUT or DELETE).
+        Task 4.4: Handle replication requests (PUT or DELETE).
         """
         operation_name = "PUT" if request.operation == kvstore_pb2.PUT else "DELETE"
         logger.info(f"[REPLICATE] {operation_name}: key={request.key} from {request.primary_node}")
@@ -466,46 +467,50 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             return kvstore_pb2.ReplicateResponse(success=False)
 
-    def Replicate(self, request, context):
-        """
-        Handle Replicate request từ primary node.
-        Primary node gửi data đến replica node.
-        """
-        logger.info(f"Replicate: key={request.key}")
-        
-        try:
-            response = kvstore_pb2.ReplicateResponse(
-                success=True,
-                node_id=self.node_id
-            )
-            return response
-        except Exception as e:
-            logger.error(f"Replicate failed: {str(e)}")
-            context.set_details(str(e))
-            context.set_code(grpc.StatusCode.INTERNAL)
-            return kvstore_pb2.ReplicateResponse(success=False)
-
     def GetSnapshot(self, request, context):
         """
         Handle GetSnapshot request.
         Node recovering request snapshot của tất cả data từ node này.
         Dùng cho recovery khi node restart.
+        
+        Phase 6: Return all key-value pairs.
         """
         logger.info("GetSnapshot request")
         
         try:
+            # Get all keys and values from storage
+            keys = self.storage.list_keys()
+            snapshot_data = []
+            
+            for key in keys:
+                value, found = self.storage.get(key)
+                if found:
+                    kv_pair = kvstore_pb2.KeyValuePair(
+                        key=key, 
+                        value=value,
+                        timestamp=int(time.time())
+                    )
+                    snapshot_data.append(kv_pair)
+            
             response = kvstore_pb2.SnapshotResponse(
-                success=True,
-                node_id=self.node_id,
-                timestamp=int(time.time()),
-                data=[]
+                data=snapshot_data,
+                total_keys=len(snapshot_data),
+                provider_node_id=self.node_id,
+                snapshot_timestamp=int(time.time())
             )
+            logger.info(f"GetSnapshot: returning {len(snapshot_data)} key-value pairs")
             return response
         except Exception as e:
             logger.error(f"GetSnapshot failed: {str(e)}")
             context.set_details(str(e))
             context.set_code(grpc.StatusCode.INTERNAL)
-            return kvstore_pb2.SnapshotResponse(success=False)
+            # Return empty snapshot on error
+            return kvstore_pb2.SnapshotResponse(
+                data=[],
+                total_keys=0,
+                provider_node_id=self.node_id,
+                snapshot_timestamp=int(time.time())
+            )
 
     def JoinCluster(self, request, context):
         """
@@ -528,7 +533,108 @@ class NodeServicer(kvstore_pb2_grpc.NodeServiceServicer):
 
 
 # ============================================================================
-# PHẦN 4: Hàm Start Server
+# PHẦN 4: Heartbeat & Failure Detection (Phase 5)
+# ============================================================================
+
+class HeartbeatManager:
+    """
+    Quản lý heartbeat và failure detection.
+    - Gửi heartbeat đến các nodes khác mỗi 5 giây
+    - Kiểm tra timeout (15 giây) để detect failure
+    """
+    
+    def __init__(self, node_id: str, membership: MembershipManager):
+        self.node_id = node_id
+        self.membership = membership
+        self.last_heartbeat = {}  # node_id -> timestamp
+        self.running = False
+        self.heartbeat_interval = 5  # seconds
+        self.failure_timeout = 15  # seconds
+        
+        # Initialize last_heartbeat for all nodes
+        for node in membership.get_all_nodes():
+            if node.node_id != node_id:
+                self.last_heartbeat[node.node_id] = time.time()
+    
+    def start(self):
+        """Start heartbeat sender and failure detector threads."""
+        self.running = True
+        
+        # Start sender thread
+        sender_thread = threading.Thread(target=self._heartbeat_sender, daemon=True)
+        sender_thread.start()
+        
+        # Start detector thread
+        detector_thread = threading.Thread(target=self._failure_detector, daemon=True)
+        detector_thread.start()
+        
+        logger.info("Heartbeat manager started")
+    
+    def stop(self):
+        """Stop heartbeat threads."""
+        self.running = False
+    
+    def _heartbeat_sender(self):
+        """Send heartbeat to all other nodes every 5 seconds."""
+        while self.running:
+            try:
+                other_nodes = [n for n in self.membership.get_all_nodes() 
+                              if n.node_id != self.node_id]
+                
+                for node in other_nodes:
+                    try:
+                        address = node.get_address()
+                        channel = grpc.insecure_channel(address)
+                        stub = kvstore_pb2_grpc.NodeServiceStub(channel)
+                        
+                        request = kvstore_pb2.HeartbeatRequest(
+                            node_id=self.node_id,
+                            timestamp=int(time.time())
+                        )
+                        response = stub.Heartbeat(request, timeout=2.0)
+                        channel.close()
+                        
+                        # Update last heartbeat received
+                        self.last_heartbeat[node.node_id] = time.time()
+                        
+                    except Exception as e:
+                        logger.debug(f"Heartbeat to {node.node_id} failed: {e}")
+                
+            except Exception as e:
+                logger.error(f"Heartbeat sender error: {e}")
+            
+            time.sleep(self.heartbeat_interval)
+    
+    def _failure_detector(self):
+        """Check for node failures based on heartbeat timeout."""
+        while self.running:
+            try:
+                current_time = time.time()
+                
+                for node_id, last_time in self.last_heartbeat.items():
+                    elapsed = current_time - last_time
+                    
+                    if elapsed > self.failure_timeout:
+                        # Node is dead
+                        node = self.membership.get_node_by_id(node_id)
+                        if node and node.is_alive:
+                            logger.warning(f"Node {node_id} detected as FAILED (timeout: {elapsed:.1f}s)")
+                            self.membership.mark_node_dead(node_id)
+                    else:
+                        # Node is alive
+                        node = self.membership.get_node_by_id(node_id)
+                        if node and not node.is_alive:
+                            logger.info(f"Node {node_id} recovered")
+                            self.membership.mark_node_alive(node_id)
+                
+            except Exception as e:
+                logger.error(f"Failure detector error: {e}")
+            
+            time.sleep(3)  # Check every 3 seconds
+
+
+# ============================================================================
+# PHẦN 5: Hàm Start Server
 # ============================================================================
 
 def serve(node_id: str = "node1", port: int = 8001):
@@ -571,11 +677,16 @@ def serve(node_id: str = "node1", port: int = 8001):
     logger.info(f"Server started on {address}")
     logger.info(f"Node ID: {node_id}")
     
+    # Phase 5: Start heartbeat manager
+    heartbeat_mgr = HeartbeatManager(node_id, membership)
+    heartbeat_mgr.start()
+    
     try:
         while True:
             time.sleep(86400)
     except KeyboardInterrupt:
         logger.info("Shutting down server...")
+        heartbeat_mgr.stop()
         replication.shutdown()
         server.stop(grace=5)
         logger.info("Server stopped")
