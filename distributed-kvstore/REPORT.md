@@ -125,13 +125,13 @@ Hệ thống được thiết kế theo mô hình **distributed peer-to-peer arc
     └─────────┘     └─────────┘     └─────────┘
 
     Storage: Thread-safe Python dict (RAM)
-    
+
     P2P Communication (gRPC):
     - Replication
     - Heartbeat
     - Data forwarding
     - Snapshot requests
-    
+
     Note: Redis integration là Phase 7 (optional, chưa implement)
 ```
 
