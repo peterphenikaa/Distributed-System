@@ -2,9 +2,11 @@
 
 ## 📝 Tổng Quan Dự Án
 
-Hệ thống lưu trữ key-value phân tán với khả năng chịu lỗi, sử dụng **gRPC** + **Python** + **Redis**. Hệ thống cho phép nhiều nodes hoạt động cùng nhau, tự động phân phối dữ liệu và đảm bảo tính sẵn sàng khi có node bị lỗi.
+Hệ thống lưu trữ key-value phân tán với khả năng chịu lỗi, sử dụng **gRPC** + **Python** với **in-memory storage**. Hệ thống cho phép nhiều nodes hoạt động cùng nhau, tự động phân phối dữ liệu và đảm bảo tính sẵn sàng khi có node bị lỗi.
 
-### 🎯 Mục Tiêu Chính5
+**Lưu ý:** Data hiện tại lưu trong RAM (thread-safe dict). Redis integration là Phase 7 (optional, chưa implement).
+
+### 🎯 Mục Tiêu Chính
 
 - Xây dựng distributed key-value store từ đầu
 - Học và apply các concepts: gRPC, Consistent Hashing, Replication, Failure Detection
@@ -43,11 +45,11 @@ distributed-kvstore/
 
 2. **Dependencies** (`requirements.txt`)
    - gRPC + Protobuf
-   - Redis client
+   - Redis client (optional, for Phase 7)
 
 3. **Config Files**
    - Cluster config cho 3 nodes (ports 8001, 8002, 8003)
-   - Redis configs cho 3 instances (ports 6379, 6380, 6381)
+   - Redis configs (optional, for Phase 7 - persistent storage)
 
 ---
 
@@ -60,32 +62,29 @@ distributed-kvstore/
     ┌─────────────┐
     │   Node 1    │◄──────┐
     │  (Port 8001)│       │
-    └──────┬──────┘       │ gRPC P2P
-           │              │ (Replication,
-    ┌──────▼──────┐       │  Heartbeat)
-    │   Redis 1   │       │
-    │ (Port 6379) │       │
-    └─────────────┘       │
+    │             │       │
+    │  In-Memory  │       │ gRPC P2P
+    │   Storage   │       │ (Replication,
+    └─────────────┘       │  Heartbeat)
                           │
     ┌─────────────┐       │
     │   Node 2    │◄──────┤
     │  (Port 8002)│       │
-    └──────┬──────┘       │
-           │              │
-    ┌──────▼──────┐       │
-    │   Redis 2   │       │
-    │ (Port 6380) │       │
+    │             │       │
+    │  In-Memory  │       │
+    │   Storage   │       │
     └─────────────┘       │
                           │
     ┌─────────────┐       │
     │   Node 3    │◄──────┘
     │  (Port 8003)│
-    └──────┬──────┘
-           │
-    ┌──────▼──────┐
-    │   Redis 3   │
-    │ (Port 6381) │
+    │             │
+    │  In-Memory  │
+    │   Storage   │
     └─────────────┘
+
+    Storage: Thread-safe Python dict (RAM)
+    Note: Redis là Phase 7 optional (chưa implement)
 ```
 
 ---

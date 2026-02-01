@@ -1,0 +1,20 @@
+[2026-01-30 23:38:54,556] [INFO] Loaded cluster config: 3 nodes
+[2026-01-30 23:38:54,556] [INFO] Replication factor: 2
+[2026-01-30 23:38:54,556] [INFO] Virtual nodes per physical node: 150
+[2026-01-30 23:38:54,556] [INFO] Loaded cluster config: 3 nodes
+[2026-01-30 23:38:54,557] [INFO] KeyValueStoreServicer initialized for node2:8002
+[2026-01-30 23:38:54,558] [INFO] NodeServicer initialized for node2:8002
+[2026-01-30 23:38:54,568] [INFO] Server started on 0.0.0.0:8002
+[2026-01-30 23:38:54,569] [INFO] Node ID: node2
+[2026-01-30 23:39:45,767] [INFO] Loaded cluster config: 3 nodes
+[2026-01-30 23:39:45,767] [INFO] Replication factor: 2
+[2026-01-30 23:39:45,767] [INFO] Virtual nodes per physical node: 150
+[2026-01-30 23:39:45,767] [INFO] Loaded cluster config: 3 nodes
+[2026-01-30 23:39:45,768] [INFO] KeyValueStoreServicer initialized for node3:8003
+[2026-01-30 23:39:45,768] [INFO] NodeServicer initialized for node3:8003
+[2026-01-30 23:39:45,786] [INFO] Server started on 0.0.0.0:8003
+[2026-01-30 23:39:45,787] [INFO] Node ID: node3
+[2026-01-30 23:40:02,064] [INFO] Shutting down server...
+[2026-01-30 23:40:02,065] [INFO] Server stopped
+[2026-01-30 23:40:02,501] [INFO] LISTKEYS request
+[2026-01-30 23:40:02,501] [INFO] LISTKEYS: returned 0 keys
